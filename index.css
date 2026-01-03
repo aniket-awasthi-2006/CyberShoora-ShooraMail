@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Inter', 'Geist', sans-serif;
+    margin: 0;
+    overflow-x: hidden;
+    @apply transition-all duration-700 ease-in-out;
+  }
+}
+
+.mesh-bg {
+  background-color: #ffffff;
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(0,0%,98%,1) 0, transparent 50%), 
+    radial-gradient(at 50% 0%, hsla(0,0%,96%,1) 0, transparent 50%), 
+    radial-gradient(at 100% 100%, hsla(0,0%,94%,1) 0, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(0,0%,98%,1) 0, transparent 50%);
+}
+
+.colored-mesh-bg {
+  background-color: #0f172a;
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+    radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
+    radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%),
+    radial-gradient(at 0% 100%, hsla(180,100%,25%,1) 0, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(280,100%,25%,1) 0, transparent 50%);
+  background-attachment: fixed;
+}
+
+h1, h2, h3, h4, h5, .font-black {
+  font-family: 'Inter', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Utility for hiding scrollbars but allowing scrolling */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Modern subtle scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 100px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background 0.3s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+  background-clip: content-box;
+}
+
+/* Dark mode adjustment for scrollbar */
+.dark-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dark-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Smoothing transition for all SVGs */
+svg, path {
+  transition: fill 0.7s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}

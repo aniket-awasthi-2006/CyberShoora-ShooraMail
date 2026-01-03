@@ -1,0 +1,5 @@
+{
+  "name": "ShooraMail Smart Mail Management ",
+  "description": "A high-fidelity recreation of the ShooraMail landing page hero section, featuring floating 3D icons, a minimalist navbar, and a detailed dashboard preview using React, Tailwind CSS, and Framer Motion.",
+  "requestFramePermissions": []
+}
