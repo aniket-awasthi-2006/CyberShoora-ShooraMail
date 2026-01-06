@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import dynamic from 'next/dynamic';
 import {
   Menu, Search, Star, Send, FileText, Trash2, Mail,
   ChevronDown, MoreHorizontal, Reply, Forward, Mails, Pin,
@@ -9,11 +10,35 @@ import {
   Settings, Bell, Shield, HelpCircle, Inbox, RefreshCw,
   Clock, Calendar, Archive, AlertCircle, RotateCcw
 } from 'lucide-react';
+import 'react-quill/dist/quill.snow.css';
 import { ThemeMode } from '../types';
 import { LogoBlack, LogoWhite } from './Logo';
 import api from '../axios';
 
+// Dynamic import for ReactQuill to avoid SSR issues
+const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
+
 const MotionDiv = motion.div as any;
+
+// Quill editor configuration
+const quillModules = {
+  toolbar: [
+    [{ 'header': [1, 2, 3, false] }],
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+    [{ 'color': [] }, { 'background': [] }],
+    ['link'],
+    ['clean']
+  ],
+};
+
+const quillFormats = [
+  'header',
+  'bold', 'italic', 'underline', 'strike',
+  'list', 'bullet',
+  'color', 'background',
+  'link'
+];
 
 const THEMES = {
   light: {
@@ -93,6 +118,7 @@ interface Message {
   avatar: string;
   folder: 'inbox' | 'sent' | 'drafts' | 'trash';
   important?: boolean;
+  isHtml?: boolean;
 }
 
 const MOCK_MESSAGES: Message[] = [
@@ -114,7 +140,7 @@ const SidebarItem: React.FC<{ icon: any; label: string; count?: number; active?:
         <span className="text-[13px] font-bold whitespace-nowrap transition-colors duration-700" style={{ color: active ? (colors.primary) : colors.textMuted }}>{label}</span>
       )}
     </div>
-    {!isCollapsed && count && (
+    {!isCollapsed && active && count && (
       <span className="text-[11px] font-bold opacity-60 group-hover:opacity-100 transition-all duration-700" style={{ color: colors.textMuted }}>{count.toLocaleString()}</span>
     )}
   </div>
@@ -161,11 +187,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
   const [isMobile, setIsMobile] = useState(false);
   const [isComposeMode, setIsComposeMode] = useState(false);
   const [isHtmlMode, setIsHtmlMode] = useState(false);
+  const [attachments, setAttachments] = useState<any[]>([]);
   const [isDeleteWarningOpen, setIsDeleteWarningOpen] = useState(false);
   const [isLogoutWarningOpen, setIsLogoutWarningOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [toasts, setToasts] = useState<{ id: string, message: string, type: 'success' | 'error' }[]>([]);
-  const [composeData, setComposeData] = useState<{ to: string; subject: string; body: string; id?: string }>({ to: '', subject: '', body: '' });
+  const [composeData, setComposeData] = useState<{ to: string; subject: string; body: string; html?: string; id?: string }>({ to: '', subject: '', body: '' });
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isReloading, setIsReloading] = useState(false);
   const [settings, setSettings] = useState({ notifications: true, autoReply: false });
   const [isColorPaletteOpen, setIsColorPaletteOpen] = useState(false);
@@ -287,7 +315,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     setSelectedMailId(null);
     setIsDeleteWarningOpen(false);
     showToast('Deleted permanently', 'success');
-    api.post('/api/delete-mail', { messageId: selectedMail.id, email: userData.email, password: localStorage.getItem('password') }).catch(() => {
+    api.post('/api/delete-mail', { messageId: selectedMail.id, email: userData.email, password: localStorage.getItem('password'), folder: selectedMail.folder === 'trash' ? 'Trash' : 'INBOX' }).catch(() => {
       showToast('Failed to delete', 'error');
     });
   };
@@ -326,6 +354,76 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
       let payload: any = { email: userData.email, password: password || '' };
       let currentFolder = 'inbox';
 
+      // Special handling for 'all' folder - fetch both inbox and sent
+      if (activeFolder === 'all') {
+        // Fetch inbox emails
+        const inboxResponse = await api.post('/api/inbox-fetch', { email: userData.email, password: password || '' });
+        
+        // Fetch sent emails
+        const sentResponse = await api.post('/api/folder-fetch', { 
+          email: userData.email, 
+          password: password || '', 
+          folder: 'Sent' 
+        });
+
+        let allMails: any[] = [];
+        
+        // Process inbox emails
+        if (inboxResponse.data.success) {
+          const inboxMails = Array.isArray(inboxResponse.data.data.mails) ? inboxResponse.data.data.mails : [];
+          allMails = allMails.concat(inboxMails.map((mail: any) => ({ ...mail, folder: 'inbox' })));
+        }
+        
+        // Process sent emails
+        if (sentResponse.data.success) {
+          const sentMails = Array.isArray(sentResponse.data.data.mails) ? sentResponse.data.data.mails : [];
+          allMails = allMails.concat(sentMails.map((mail: any) => ({ ...mail, folder: 'sent' })));
+        }
+
+        const categories = ['work', 'personal', 'promotions'];
+
+        // Map and sort all emails by date
+        const mappedMessages: Message[] = allMails
+          .map((mail: any, index: number) => {
+            // Robust sender extraction to handle objects/arrays from IMAP parsers
+            let senderName = mail.sender;
+            let senderAddress = mail.senderEmail;
+
+            // Assign category randomly for demo purposes
+            const assignedCategory = categories[index % categories.length];
+
+            return {
+              id: mail.messageId || mail.id || `${mail.folder}_${index}`,
+              sender: senderName,
+              senderEmail: senderAddress,
+              to: mail.to,
+              toEmail: mail.toEmail,
+              subject: typeof mail.subject === 'string' ? mail.subject : (mail.subject?.text || '(No Subject)'),
+              preview: (mail.preview || '').replace(/<[^>]*>?/gm, ''),
+              body: mail.body || '',
+              date: mail.date ? new Date(mail.date) : new Date(),
+              unread: mail.folder === 'sent' ? false : mail.unread, // Sent emails are always read
+              flagged: mail.flagged,
+              categoryColor: '#2D62ED',
+              category: assignedCategory,
+              attachments: !!mail.attachments && mail.attachments.length > 0,
+              avatar: `https://i.pravatar.cc/100?u=${senderAddress}`,
+              folder: mail.folder as any,
+              important: mail.important,
+            };
+          })
+          .sort((a, b) => b.date.getTime() - a.date.getTime()) // Sort by date (newest first)
+          .map((mail) => ({
+            ...mail,
+            date: mail.date.toLocaleDateString() // Convert back to string after sorting
+          }));
+
+        userData.inboxMails = mappedMessages;
+        setMessages(mappedMessages);
+        showToast(`${activeFolder} synced successfully`, 'success');
+        return;
+      }
+
       // Use folder-fetch for specific IMAP folders
       const specificFolders = ['sent', 'drafts', 'trash'];
       if (specificFolders.includes(activeFolder)) {
@@ -340,7 +438,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
         payload.folder = folderMap[activeFolder];
         currentFolder = activeFolder;
       } else {
-        // For inbox, all, starred, important, categories - fetch all and filter client-side
+        // For inbox, starred, important, categories - fetch all and filter client-side
         currentFolder = activeFolder === 'all' ? 'inbox' : activeFolder;
       }
 
@@ -394,13 +492,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
   };
 
   const handleSend = async () => {
-    if (!composeData.to || !composeData.subject || !composeData.body) {
+    if (!composeData.to || !composeData.subject || (!composeData.body && !composeData.html)) {
       showToast('Please fill all fields', 'error');
       return;
     }
     setIsReloading(true);
     try {
-      await api.post('/api/send-mail', { ...composeData, email: userData.email, password: localStorage.getItem('password') });
+      // Always send HTML content - if html is provided use it, otherwise convert body to HTML
+      const htmlContent = composeData.html || composeData.body;
+      
+      await api.post('/api/send-mail', { 
+        to: composeData.to,
+        subject: composeData.subject,
+        body: composeData.body,
+        html: htmlContent,
+        email: userData.email, 
+        password: localStorage.getItem('password'),
+        attachments: attachments.length > 0 ? attachments : undefined
+      });
       showToast('Email sent successfully', 'success');
 
       const sentMsg: Message = {
@@ -410,16 +519,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
         to: composeData.to,
         toEmail: composeData.to,
         subject: composeData.subject,
-        preview: composeData.body.substring(0, 100),
-        body: composeData.body,
+        preview: (htmlContent || composeData.body).replace(/<[^>]*>?/gm, '').substring(0, 100),
+        body: htmlContent || composeData.body,
         date: 'Just now',
         folder: 'sent',
         avatar: `https://i.pravatar.cc/100?u=${userData.email}`,
-        unread: false
+        unread: false,
+        attachments: attachments.length > 0,
+        isHtml: true // Always mark as HTML since we're sending HTML
       };
       setMessages(prev => [sentMsg, ...prev]);
       setIsComposeMode(false);
-      setComposeData({ to: '', subject: '', body: '' });
+      setComposeData({ to: '', subject: '', body: '', html: '' });
+      setAttachments([]);
+      setIsHtmlMode(false);
     } catch (e) {
       showToast('Failed to send email', 'error');
     } finally {
@@ -427,23 +540,61 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     }
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const formData = new FormData();
+    Array.from(files).forEach(file => {
+      formData.append('files', file);
+    });
+    formData.append('email', userData.email);
+
+    try {
+      const response = await api.post('/api/upload-attachments', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response.data.success) {
+        setAttachments(prev => [...prev, ...response.data.files]);
+        showToast('Files uploaded successfully', 'success');
+      } else {
+        showToast(response.data.message || 'Failed to upload files', 'error');
+      }
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to upload files';
+      showToast(errorMessage, 'error');
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSaveDraft = async () => {
     if (!composeData.to && !composeData.subject && !composeData.body) {
       showToast('Nothing to save', 'error');
-
-      return;
-    }
-    setIsReloading(true);
-    try {
-      const res = await api.post('/api/save-draft', { ...composeData, email: userData.email, password: localStorage.getItem('password') });
-      if (res.data && res.data.id) {
-        setComposeData(prev => ({ ...prev, id: res.data.id }));
+    } else {
+      setIsReloading(true);
+      try {
+        const res = await api.post('/api/save-draft', { ...composeData, email: userData.email, password: localStorage.getItem('password') });
+        if (res.data && res.data.id) {
+          setComposeData(prev => ({ ...prev, id: res.data.id }));
+        }
+        showToast('Draft saved successfully', 'success');
+      } catch (e) {
+        showToast('Failed to save draft', 'error');
+      } finally {
+        setIsReloading(false);
       }
-      showToast('Draft saved successfully', 'success');
-    } catch (e) {
-      showToast('Failed to save draft', 'error');
-    } finally {
-      setIsReloading(false);
     }
   };
 
@@ -460,13 +611,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
   const handleDiscardCompose = async () => {
     const draftId = composeData.id;
     setIsComposeMode(false);
-    setComposeData({ to: '', subject: '', body: '' });
+    setComposeData({ to: '', subject: '', body: '', html: '' });
     setSelectedMailId(null);
+    setAttachments([]);
+    setIsHtmlMode(false);
 
     if (draftId) {
       setMessages(prev => prev.filter(m => m.id !== draftId));
       try {
-        await api.post('/api/delete-mail', { messageId: draftId, email: userData.email, password: localStorage.getItem('password') });
+        await api.post('/api/delete-mail', { messageId: draftId, email: userData.email, password: localStorage.getItem('password'), folder: 'Drafts' });
         showToast('Draft deleted', 'success');
       } catch (e) { /* Silent fail */ }
     }
@@ -483,8 +636,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
 
     if (mail.folder === 'trash') {
       setMessages(prev => prev.filter(m => m.id !== mail.id));
-      api.post('/api/delete-mail', { messageId: mail.id, email: userData.email, password: localStorage.getItem('password') }).catch(() => { });
+      api.post('/api/delete-mail', { messageId: mail.id, email: userData.email, password: localStorage.getItem('password'), folder: 'Trash' }).catch(() => { });
       showToast('Deleted permanently', 'success');
+    } else if (mail.folder === 'drafts') {
+      setMessages(prev => prev.filter(m => m.id !== mail.id));
+      api.post('/api/delete-mail', { messageId: mail.id, email: userData.email, password: localStorage.getItem('password'), folder: 'Drafts' }).catch(() => { });
+      showToast('Draft deleted', 'success');
     } else {
       setMessages(prev => prev.map(m => m.id === mail.id ? { ...m, folder: 'trash' } : m));
       api.post('/api/move-mail', { messageId: mail.id, email: userData.email, password: localStorage.getItem('password'), destinationFolder: 'Trash' }).catch(() => { });
@@ -555,7 +712,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
               <SidebarItem icon={Pin} label="Important" count={messages.filter(m => m.important).length || undefined} active={activeFolder === 'important'} onClick={() => setActiveFolder('important')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
               <SidebarItem icon={Send} label="Sent" count={messages.filter(m => m.folder === 'sent').length || undefined} active={activeFolder === 'sent'} onClick={() => setActiveFolder('sent')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
               <SidebarItem icon={FileText} label="Drafts" count={messages.filter(m => m.folder === 'drafts').length || undefined} active={activeFolder === 'drafts'} onClick={() => setActiveFolder('drafts')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
-              <SidebarItem icon={Mails} label="All Mails" count={messages.filter(m => m.folder !== 'trash').length || undefined} active={activeFolder === 'all'} onClick={() => setActiveFolder('all')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
+              <SidebarItem icon={Mails} label="All Mails" count={activeFolder === 'all' && (messages.filter(m => m.folder === 'inbox').length + messages.filter(m => m.folder === 'sent').length) > 0 ? (messages.filter(m => m.folder === 'inbox').length + messages.filter(m => m.folder === 'sent').length) : null } active={activeFolder === 'all'} onClick={() => setActiveFolder('all')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
               <SidebarItem icon={Settings} label="Settings" onClick={() => setIsSettingsOpen(true)} isCollapsed={isCollapsed && !isMobile} colors={colors} />
               <SidebarItem icon={Trash2} label="Trash" count={messages.filter(m => m.folder === 'trash').length || undefined} active={activeFolder === 'trash'} onClick={() => setActiveFolder('trash')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
 
@@ -668,13 +825,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                     <span className={`text-sm transition-colors duration-700 ${msg.unread ? 'font-black' : 'font-bold'}`} style={{ color: colors.textMain }}>{activeFolder === 'sent' ? msg.to : msg.sender}</span>
                   </div>
                   <span className={`text-[10px] uppercase font-bold tracking-wider transition-all duration-300 ${selectedMailId === msg.id ? 'opacity-0' : 'group-hover:opacity-0'}`} style={{ color: colors.textMuted }}>{msg.date}</span>
-                  <button
-                    onClick={(e) => handleDeleteFromList(e, msg)}
-                    className={`absolute right-0 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-red-500/10 text-red-500 transition-all duration-300 ${selectedMailId === msg.id ? 'opacity-100 scale-100' : 'opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100'}`}
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {activeFolder === 'drafts' && (
+                    <button
+                      onClick={(e) => handleDeleteFromList(e, msg)}
+                      className={`absolute right-0 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-red-500/10 text-red-500 transition-all duration-300 ${selectedMailId === msg.id ? 'opacity-100 scale-100' : 'opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100'}`}
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
                 <h4 className="text-[13px] font-bold truncate mb-1 transition-colors duration-700" style={{ color: colors.textMain }}>{msg.subject}</h4>
                 <p className="text-[11px] line-clamp-2 leading-relaxed transition-colors duration-700" style={{ color: colors.textMuted }}>{msg.preview}</p>
@@ -712,7 +871,100 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                 <div className="flex flex-col gap-6">
                   <input value={composeData.to} onChange={e => setComposeData({ ...composeData, to: e.target.value })} placeholder="To" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: colors.textMain }} />
                   <input value={composeData.subject} onChange={e => setComposeData({ ...composeData, subject: e.target.value })} placeholder="Subject" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: colors.textMain }} />
-                  <textarea value={composeData.body} onChange={e => setComposeData({ ...composeData, body: e.target.value })} placeholder="Message" className="w-full p-4 rounded-xl border bg-transparent outline-none h-64 resize-none transition-colors" style={{ borderColor: colors.border, color: colors.textMain }}></textarea>
+                  
+                  {/* HTML/Text Mode Toggle */}
+                  <div className="flex items-center justify-between p-2 rounded-xl border" style={{ borderColor: colors.border, backgroundColor: colors.inputBg }}>
+                    <span className="text-sm font-bold" style={{ color: colors.textMain }}>Compose Mode:</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setIsHtmlMode(false)}
+                        className={`px-3 py-1 rounded-lg text-sm font-bold transition-all ${!isHtmlMode ? 'shadow-lg' : 'opacity-60'}`}
+                        style={{ backgroundColor: !isHtmlMode ? colors.primary : 'transparent', color: !isHtmlMode ? 'white' : colors.textMuted }}
+                      >
+                        Text
+                      </button>
+                      <button
+                        onClick={() => setIsHtmlMode(true)}
+                        className={`px-3 py-1 rounded-lg text-sm font-bold transition-all ${isHtmlMode ? 'shadow-lg' : 'opacity-60'}`}
+                        style={{ backgroundColor: isHtmlMode ? colors.primary : 'transparent', color: isHtmlMode ? 'white' : colors.textMuted }}
+                      >
+                        HTML
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Message Body */}
+                  {isHtmlMode ? (
+                    <textarea 
+                      value={composeData.html || ''} 
+                      onChange={e => setComposeData({ ...composeData, html: e.target.value })} 
+                      placeholder="Compose HTML Message...." 
+                      className="w-full p-4 rounded-xl border bg-transparent outline-none resize-none transition-colors" 
+                      style={{ borderColor: colors.border, color: colors.textMain, height: '500px' }}
+                    />
+                  ) : (
+                    <div className="rounded-xl border overflow-hidden transition-colors" style={{ borderColor: colors.border }}>
+                      <ReactQuill
+                        value={composeData.body || ''}
+                        onChange={(content) => setComposeData({ ...composeData, body: content })}
+                        modules={quillModules}
+                        formats={quillFormats}
+                        placeholder="Compose your Message..."
+                        style={{ height: '500px' }}
+                        theme="snow"
+                      />
+                    </div>
+                  )}
+
+                  {/* Attachments */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold" style={{ color: colors.textMain }}>Attachments:</span>
+                      <div className="flex gap-2">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          onChange={handleFileUpload}
+                          accept="image/*,.pdf,.doc,.docx,.txt,.csv,video/*,audio/*"
+                          className="hidden"
+                        />
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="px-3 py-1 rounded-lg text-sm font-bold transition-all hover:scale-105"
+                          style={{ backgroundColor: colors.itemActiveBg, color: colors.primary }}
+                        >
+                          <Plus className="w-4 h-4 inline mr-1" />
+                          Add Files
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {attachments.length > 0 && (
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {attachments.map((attachment, index) => (
+                          <div key={index} className="flex items-center justify-between p-2 rounded-lg border" style={{ borderColor: colors.border, backgroundColor: colors.inputBg }}>
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4" style={{ color: colors.textMuted }} />
+                              <span className="text-sm truncate" style={{ color: colors.textMain }}>
+                                {attachment.filename}
+                              </span>
+                              <span className="text-xs opacity-60" style={{ color: colors.textMuted }}>
+                                ({(attachment.size / 1024).toFixed(1)} KB)
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => removeAttachment(index)}
+                              className="p-1 rounded hover:bg-red-500/10 text-red-500 transition-colors"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex items-center justify-end">
                     <div className="flex gap-4">
                       <button onClick={handleSaveDraft} disabled={isReloading} className="px-6 py-2.5 rounded-xl font-bold shadow-lg hover:scale-105 transition-all flex items-center gap-2" style={{ backgroundColor: colors.itemActiveBg, color: colors.primary }}>
@@ -775,18 +1027,59 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                       </div>
                     </div>
                     <div className="sm:text-right">
-                      <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1 transition-colors duration-700" style={{ color: colors.textMuted }}>{activeFolder === 'sent' ? 'Sent' : 'Received'}</p>
+                      <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1 transition-colors duration-700" style={{ color: colors.textMuted }}>{selectedMail.toEmail === userData.email ? "Received" : "Sent"}</p>
                       <p className="text-sm font-black transition-colors duration-700" style={{ color: colors.textMain }}>{selectedMail.date}, 10:24 AM</p>
                     </div>
                   </div>
 
                   <div className="space-y-8 text-lg md:text-xl leading-[1.6] font-medium transition-colors duration-700" style={{ color: colors.textMain }}>
-                    {selectedMail.body.includes('<') ? (
+                    {selectedMail.isHtml ? (
                       <div dangerouslySetInnerHTML={{ __html: selectedMail.body }}></div>
                     ) : (
                       <p>{selectedMail.body}</p>
                     )}
                   </div>
+
+                  {/* Attachments Section */}
+                  {selectedMail.attachments && Array.isArray(selectedMail.attachments) && selectedMail.attachments.length > 0 && (
+                    <div className="mt-6 p-4 rounded-xl border" style={{ borderColor: colors.border, backgroundColor: colors.inputBg }}>
+                      <h4 className="text-sm font-bold mb-3 flex items-center gap-2" style={{ color: colors.textMain }}>
+                        <FileText className="w-4 h-4" />
+                        Attachments ({selectedMail.attachments.length})
+                      </h4>
+                      <div className="space-y-2">
+                        {selectedMail.attachments.map((attachment: any, index: number) => (
+                          <div key={index} className="flex items-center justify-between p-3 rounded-lg border" style={{ borderColor: colors.border, backgroundColor: colors.rightPaneBg }}>
+                            <div className="flex items-center gap-3">
+                              <FileText className="w-5 h-5" style={{ color: colors.textMuted }} />
+                              <div>
+                                <p className="text-sm font-bold" style={{ color: colors.textMain }}>
+                                  {attachment.filename || attachment.name || `Attachment ${index + 1}`}
+                                </p>
+                                <p className="text-xs opacity-60" style={{ color: colors.textMuted }}>
+                                  {attachment.size ? `${(attachment.size / 1024).toFixed(1)} KB` : 'Unknown size'}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              className="px-3 py-1 rounded-lg text-xs font-bold transition-all hover:scale-105"
+                              style={{ backgroundColor: colors.primary, color: 'white' }}
+                              onClick={() => {
+                                const link = document.createElement('a');
+                                link.href = attachment.url || `/uploads/${attachment.filename}`;
+                                link.download = attachment.filename || `attachment-${index}`;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }}
+                            >
+                              Download
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </>
@@ -796,7 +1089,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                 <Mail className="w-10 h-10 transition-colors duration-700" style={{ color: colors.textMain }} />
               </div>
               <h3 className="text-xl font-black mb-2 transition-colors duration-700" style={{ color: colors.textMain }}>No message selected</h3>
-              <p className="text-sm font-bold max-w-xs transition-colors duration-700" style={{ color: colors.textMuted }}>Select a conversation from the list to read its content here.</p>
+              <p className="text-sm font-bold max-w-xs transition-colors duration-700" style={{ color: colors.textMuted }}>Select a conversation from list to read its content here.</p>
             </div>
           )}
         </div>

@@ -262,11 +262,11 @@ const toggleImportant = async (email, password, messageId, important) => {
 
     await client.logout();
 };
-const deleteEmail = async (email, password, messageId) => {
+const deleteEmail = async (email, password, messageId, folder = 'INBOX') => {
     const client = getClient(email, password);
     await client.connect();
 
-    let lock = await client.getMailboxLock('INBOX');
+    let lock = await client.getMailboxLock(folder);
     try {
         // Mark as deleted
         await client.messageFlagsAdd(messageId, ['\\Deleted'], { uid: true });

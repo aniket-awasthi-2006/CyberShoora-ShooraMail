@@ -34,12 +34,23 @@ const sendEmail = async (authDetails, mailOptions) => {
 
 const replyEmail = async (authDetails, mailOptions) => {
     const replySubject = mailOptions.subject.startsWith('Re: ') ? mailOptions.subject : `Re: ${mailOptions.subject}`;
-    const replyBody = `\n\n--- Original Message ---\n${mailOptions.text}`;
+    
+    // Handle HTML content properly
+    let replyBodyHtml, replyBodyText;
+    
+    if (mailOptions.html) {
+        replyBodyHtml = `${mailOptions.html}<br><br><hr><p><em>--- Original Message ---</em></p>${mailOptions.html}`;
+        replyBodyText = mailOptions.text || mailOptions.html.replace(/<[^>]*>?/gm, '');
+    } else {
+        replyBodyText = `\n\n--- Original Message ---\n${mailOptions.text}`;
+        replyBodyHtml = `<div>${replyBodyText.replace(/\n/g, '<br>')}</div>`;
+    }
 
     const replyOptions = {
         ...mailOptions,
         subject: replySubject,
-        text: replyBody,
+        html: replyBodyHtml,
+        text: replyBodyText,
     };
 
     const transporter = createTransporter(authDetails);
@@ -48,12 +59,23 @@ const replyEmail = async (authDetails, mailOptions) => {
 
 const forwardEmail = async (authDetails, mailOptions) => {
     const forwardSubject = mailOptions.subject.startsWith('Fwd: ') ? mailOptions.subject : `Fwd: ${mailOptions.subject}`;
-    const forwardBody = `\n\n--- Forwarded Message ---\n${mailOptions.text}`;
+    
+    // Handle HTML content properly
+    let forwardBodyHtml, forwardBodyText;
+    
+    if (mailOptions.html) {
+        forwardBodyHtml = `${mailOptions.html}<br><br><hr><p><em>--- Forwarded Message ---</em></p>${mailOptions.html}`;
+        forwardBodyText = mailOptions.text || mailOptions.html.replace(/<[^>]*>?/gm, '');
+    } else {
+        forwardBodyText = `\n\n--- Forwarded Message ---\n${mailOptions.text}`;
+        forwardBodyHtml = `<div>${forwardBodyText.replace(/\n/g, '<br>')}</div>`;
+    }
 
     const forwardOptions = {
         ...mailOptions,
         subject: forwardSubject,
-        text: forwardBody,
+        html: forwardBodyHtml,
+        text: forwardBodyText,
     };
 
     const transporter = createTransporter(authDetails);
