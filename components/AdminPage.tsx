@@ -1,4 +1,6 @@
 
+'use client'
+
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
@@ -9,13 +11,13 @@ import {
   CheckCircle2, PauseCircle, ChevronRight,
   Sun, Moon, Palette
 } from 'lucide-react';
-import { View, ThemeMode } from '../App';
+import { View, ThemeMode } from '../types';
 import { LogoBlack, LogoWhite } from './Logo';
 
 const MotionDiv = motion.div as any;
 
 interface AdminPageProps {
-  onNavigate: (v: View) => void;
+  onNavigate: (path: string) => void;
   themeMode: ThemeMode;
   setThemeMode: (mode: ThemeMode) => void;
 }

@@ -1,7 +1,9 @@
 
+'use client'
+
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ThemeMode } from '../App';
+import { ThemeMode } from '../types';
 
 const MotionDiv = motion.div as any;
 

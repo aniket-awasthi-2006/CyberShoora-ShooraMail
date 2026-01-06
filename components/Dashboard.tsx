@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -7,7 +9,7 @@ import {
   Settings, Bell, Shield, HelpCircle, Inbox, RefreshCw,
   Clock, Calendar, Archive, AlertCircle, RotateCcw
 } from 'lucide-react';
-import { ThemeMode } from '../App';
+import { ThemeMode } from '../types';
 import { LogoBlack, LogoWhite } from './Logo';
 import api from '../axios';
 
@@ -163,7 +165,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
   const [isLogoutWarningOpen, setIsLogoutWarningOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [toasts, setToasts] = useState<{ id: string, message: string, type: 'success' | 'error' }[]>([]);
-  const [composeData, setComposeData] = useState({ to: '', subject: '', body: '' });
+  const [composeData, setComposeData] = useState<{ to: string; subject: string; body: string; id?: string }>({ to: '', subject: '', body: '' });
   const [isReloading, setIsReloading] = useState(false);
   const [settings, setSettings] = useState({ notifications: true, autoReply: false });
   const [isColorPaletteOpen, setIsColorPaletteOpen] = useState(false);
@@ -212,7 +214,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     const saveDraft = async () => {
       if (isComposeMode && (composeData.to || composeData.subject || composeData.body)) {
         try {
-          await api.post('/api/save-draft', { ...composeData, email: userData.email });
+          let composeDraft = { to: composeData.to, subject: composeData.subject, body: composeData.body };
+          const res = await api.post('/api/save-draft', { email: userData.email, password: localStorage.getItem('password'), composeData: composeDraft });
+          if (res.data && res.data.id && res.data.id !== composeData.id) {
+            setComposeData(prev => ({ ...prev, id: res.data.id }));
+          }
         } catch (e) { /* Silent fail for drafts */ }
       }
     };
@@ -244,6 +250,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
 
   const handleSelectMail = (mail: Message) => {
     setSelectedMailId(mail.id);
+    if (mail.folder === 'drafts') {
+      setComposeData({
+        to: mail.toEmail || mail.to,
+        subject: mail.subject,
+        body: mail.body,
+        id: mail.id
+      });
+      setIsComposeMode(true);
+      return;
+    }
     if (mail.unread) {
       setMessages(prev => prev.map(m => m.id === mail.id ? { ...m, unread: false } : m));
       api.post('/api/mark-read', { messageId: mail.id, email: userData.email, password: localStorage.getItem('password'), read: true }).catch(() => { });
@@ -288,10 +304,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
   };
 
   const handleRestore = () => {
-    if (!selectedMail) return;
     setMessages(prev => prev.map(m => m.id === selectedMail.id ? { ...m, folder: 'inbox' } : m));
     setSelectedMailId(null);
-    api.post('/api/move-mail', { messageId: selectedMail.id, email: userData.email, password: localStorage.getItem('password'), destinationFolder: 'INBOX' }).catch(() => { });
+    showToast('Restored to Inbox', 'success');
+    api.post('/api/move-mail', { messageId: selectedMail.id, email: userData.email, password: localStorage.getItem('password'), destinationFolder: 'INBOX' }).catch(() => {
+      showToast('Failed to restore', 'error');
+    });
   };
 
   const handleStar = () => {
@@ -417,7 +435,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     }
     setIsReloading(true);
     try {
-      await api.post('/api/save-draft', { ...composeData, email: userData.email, password: localStorage.getItem('password') });
+      const res = await api.post('/api/save-draft', { ...composeData, email: userData.email, password: localStorage.getItem('password') });
+      if (res.data && res.data.id) {
+        setComposeData(prev => ({ ...prev, id: res.data.id }));
+      }
       showToast('Draft saved successfully', 'success');
     } catch (e) {
       showToast('Failed to save draft', 'error');
@@ -436,6 +457,40 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     }
   };
 
+  const handleDiscardCompose = async () => {
+    const draftId = composeData.id;
+    setIsComposeMode(false);
+    setComposeData({ to: '', subject: '', body: '' });
+    setSelectedMailId(null);
+
+    if (draftId) {
+      setMessages(prev => prev.filter(m => m.id !== draftId));
+      try {
+        await api.post('/api/delete-mail', { messageId: draftId, email: userData.email, password: localStorage.getItem('password') });
+        showToast('Draft deleted', 'success');
+      } catch (e) { /* Silent fail */ }
+    }
+  };
+
+  const handleDeleteFromList = (e: React.MouseEvent, mail: Message) => {
+    e.stopPropagation();
+
+    if (selectedMailId === mail.id) {
+      setSelectedMailId(null);
+      setIsComposeMode(false);
+      setComposeData({ to: '', subject: '', body: '' });
+    }
+
+    if (mail.folder === 'trash') {
+      setMessages(prev => prev.filter(m => m.id !== mail.id));
+      api.post('/api/delete-mail', { messageId: mail.id, email: userData.email, password: localStorage.getItem('password') }).catch(() => { });
+      showToast('Deleted permanently', 'success');
+    } else {
+      setMessages(prev => prev.map(m => m.id === mail.id ? { ...m, folder: 'trash' } : m));
+      api.post('/api/move-mail', { messageId: mail.id, email: userData.email, password: localStorage.getItem('password'), destinationFolder: 'Trash' }).catch(() => { });
+      showToast('Moved to trash', 'success');
+    }
+  };
 
   const scrollbarClass = `custom-scrollbar ${themeMode !== 'light' ? 'dark-scrollbar' : ''}`;
 
@@ -600,19 +655,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
               <div
                 key={msg.id}
                 onClick={() => handleSelectMail(msg)}
-                className="px-6 py-5 border-b cursor-pointer transition-all duration-700"
+                className="px-6 py-5 border-b cursor-pointer transition-all duration-700 group relative"
                 style={{
                   backgroundColor: selectedMailId === msg.id ? colors.primary + '0D' : 'transparent',
                   borderColor: colors.border,
                   borderLeft: selectedMailId === msg.id ? `4px solid ${colors.primary}` : '4px solid transparent'
                 }}
               >
-                <div className="flex justify-between items-start mb-1">
+                <div className="flex justify-between items-start mb-1 relative">
                   <div className="flex items-center gap-2">
                     {msg.unread ? <div className="w-2 h-2 rounded-full transition-colors duration-700" style={{ backgroundColor: colors.unread }}></div> : null}
                     <span className={`text-sm transition-colors duration-700 ${msg.unread ? 'font-black' : 'font-bold'}`} style={{ color: colors.textMain }}>{activeFolder === 'sent' ? msg.to : msg.sender}</span>
                   </div>
-                  <span className="text-[10px] uppercase font-bold tracking-wider transition-colors duration-700" style={{ color: colors.textMuted }}>{msg.date}</span>
+                  <span className={`text-[10px] uppercase font-bold tracking-wider transition-all duration-300 ${selectedMailId === msg.id ? 'opacity-0' : 'group-hover:opacity-0'}`} style={{ color: colors.textMuted }}>{msg.date}</span>
+                  <button
+                    onClick={(e) => handleDeleteFromList(e, msg)}
+                    className={`absolute right-0 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-red-500/10 text-red-500 transition-all duration-300 ${selectedMailId === msg.id ? 'opacity-100 scale-100' : 'opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100'}`}
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
                 <h4 className="text-[13px] font-bold truncate mb-1 transition-colors duration-700" style={{ color: colors.textMain }}>{msg.subject}</h4>
                 <p className="text-[11px] line-clamp-2 leading-relaxed transition-colors duration-700" style={{ color: colors.textMuted }}>{msg.preview}</p>
@@ -651,15 +713,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                   <input value={composeData.to} onChange={e => setComposeData({ ...composeData, to: e.target.value })} placeholder="To" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: colors.textMain }} />
                   <input value={composeData.subject} onChange={e => setComposeData({ ...composeData, subject: e.target.value })} placeholder="Subject" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: colors.textMain }} />
                   <textarea value={composeData.body} onChange={e => setComposeData({ ...composeData, body: e.target.value })} placeholder="Message" className="w-full p-4 rounded-xl border bg-transparent outline-none h-64 resize-none transition-colors" style={{ borderColor: colors.border, color: colors.textMain }}></textarea>
-                  <div className="flex justify-end gap-4">
-                    <button onClick={handleSaveDraft} disabled={isReloading} className="px-6 py-2.5 rounded-xl font-bold shadow-lg hover:scale-105 transition-all flex items-center gap-2" style={{ backgroundColor: colors.itemActiveBg, color: colors.primary }}>
-                      {isReloading && <Loader2 className="w-4 h-4 animate-spin" />}
-                      Save Draft
-                    </button>
-                    <button onClick={handleSend} disabled={isReloading} className="px-6 py-2.5 rounded-xl font-bold text-white shadow-lg hover:scale-105 transition-all flex items-center gap-2" style={{ backgroundColor: colors.primary }}>
-                      {isReloading && <Loader2 className="w-4 h-4 animate-spin" />}
-                      Send Message
-                    </button>
+                  <div className="flex items-center justify-end">
+                    <div className="flex gap-4">
+                      <button onClick={handleSaveDraft} disabled={isReloading} className="px-6 py-2.5 rounded-xl font-bold shadow-lg hover:scale-105 transition-all flex items-center gap-2" style={{ backgroundColor: colors.itemActiveBg, color: colors.primary }}>
+                        {isReloading && <Loader2 className="w-4 h-4 animate-spin" />}
+                        Save Draft
+                      </button>
+                      <button onClick={handleSend} disabled={isReloading} className="px-6 py-2.5 rounded-xl font-bold text-white shadow-lg hover:scale-105 transition-all flex items-center gap-2" style={{ backgroundColor: colors.primary }}>
+                        {isReloading && <Loader2 className="w-4 h-4 animate-spin" />}
+                        Send Message
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

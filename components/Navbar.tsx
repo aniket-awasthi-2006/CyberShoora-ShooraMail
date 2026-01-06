@@ -1,14 +1,16 @@
 
+'use client'
+
 import React, { useState } from 'react';
 import { ArrowRight, Menu, Lock, X, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { View, ThemeMode } from '../App';
+import { View, ThemeMode } from '../types';
 import { LogoBlack, LogoWhite } from './Logo';
 
 const MotionDiv = motion.div as any;
 
 interface NavbarProps {
-  onNavigate: (view: View) => void;
+  onNavigate: (path: string) => void;
   currentView: View;
   themeMode: ThemeMode;
   setThemeMode: (mode: ThemeMode) => void;
@@ -35,14 +37,14 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentView, themeMode, set
       setShowAuthModal(true);
       setClickHistory([]); // Reset
     } else {
-      if (currentView !== 'landing') onNavigate('landing');
+      if (currentView !== 'landing') onNavigate('/');
     }
   };
 
   const handleAdminAuth = (e: React.FormEvent) => {
     e.preventDefault();
     if (password === 'Aniket@2006') {
-      onNavigate('admin');
+      onNavigate('/admin');
       setShowAuthModal(false);
       setPassword('');
       setError(false);
@@ -85,7 +87,7 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentView, themeMode, set
           <div className="flex items-center gap-6 md:gap-8">
             <div className="hidden sm:flex items-center gap-6 text-[10px] md:text-sm font-black uppercase tracking-widest">
               <button
-                onClick={() => onNavigate('pricing')}
+                onClick={() => onNavigate('/pricing')}
                 className={`transition-all duration-500 hover:opacity-100 ${currentView === 'pricing' ? 'opacity-100' : 'opacity-40'} ${!isDark ? 'text-black' : 'text-white'}`}
               >
                 Pricing
@@ -94,7 +96,7 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentView, themeMode, set
             </div>
 
             <button
-              onClick={() => onNavigate('signin')}
+              onClick={() => onNavigate('/auth/signin')}
               className={`px-5 md:px-7 py-2.5 md:py-3 rounded-full text-[12px] md:text-xs font-black tracking-widest flex items-center gap-2 transition-all duration-700 shadow-xl group ${isDark ? 'bg-white text-black hover:bg-gray-100' :
                 isColored ? '' :
                   'bg-black text-white hover:bg-gray-900'

@@ -1,7 +1,9 @@
+'use client'
+
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Check, Zap, Shield, Globe } from 'lucide-react';
-import { View, ThemeMode } from '../App';
+import { View, ThemeMode } from '../types';
 import { LogoBlack, LogoWhite } from './Logo';
 
 const MotionDiv = motion.div as any;
@@ -98,7 +100,7 @@ const PricingCard: React.FC<{
   );
 };
 
-const PricingPage: React.FC<{ onNavigate: (v: View) => void; themeMode: ThemeMode; customTextColor?: string; customBgColor?: string }> = ({ onNavigate, themeMode, customTextColor, customBgColor }) => {
+const PricingPage: React.FC<{ onNavigate: (path: string) => void; themeMode: ThemeMode; customTextColor?: string; customBgColor?: string }> = ({ onNavigate, themeMode, customTextColor, customBgColor }) => {
   const isLight = themeMode === 'light';
   const isColored = themeMode === 'colored';
   const isDark = themeMode === 'dark';
@@ -134,7 +136,7 @@ const PricingPage: React.FC<{ onNavigate: (v: View) => void; themeMode: ThemeMod
           title="Free"
           price="$0"
           description="Perfect for individuals managing light loads."
-          onSelect={() => onNavigate('signup')}
+          onSelect={() => onNavigate('/auth/signup')}
           themeMode={themeMode}
           customTextColor={customTextColor}
           customBgColor={customBgColor}
@@ -150,7 +152,7 @@ const PricingPage: React.FC<{ onNavigate: (v: View) => void; themeMode: ThemeMod
           price="$15"
           recommended
           description="Most popular for professionals and power users."
-          onSelect={() => onNavigate('signup')}
+          onSelect={() => onNavigate('/auth/signup')}
           themeMode={themeMode}
           customTextColor={customTextColor}
           customBgColor={customBgColor}
@@ -166,7 +168,7 @@ const PricingPage: React.FC<{ onNavigate: (v: View) => void; themeMode: ThemeMod
           title="Enterprise"
           price="Custom"
           description="Bespoke solutions for larger organizations."
-          onSelect={() => onNavigate('signup')}
+          onSelect={() => onNavigate('/auth/signup')}
           themeMode={themeMode}
           customTextColor={customTextColor}
           customBgColor={customBgColor}

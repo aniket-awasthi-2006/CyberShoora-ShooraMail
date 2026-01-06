@@ -1,15 +1,17 @@
+'use client'
+
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Calendar, Folder, Paperclip, FileText, Search, Inbox } from 'lucide-react';
 import FloatingIcon from './FloatingIcon';
-import { View, ThemeMode } from '../App';
+import { View, ThemeMode } from '../types';
 
 const MotionH1 = motion.h1 as any;
 const MotionP = motion.p as any;
 const MotionButton = motion.button as any;
 
 interface HeroProps {
-  onNavigate: (view: View) => void;
+  onNavigate: (path: string) => void;
   themeMode: ThemeMode;
   customTextColor?: string;
   customBgColor?: string;
@@ -56,7 +58,7 @@ const Hero: React.FC<HeroProps> = ({ onNavigate, themeMode, customTextColor, cus
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <MotionButton
-            onClick={() => onNavigate('signup')}
+            onClick={() => onNavigate('/auth/signup')}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, delay: 0.4 }}

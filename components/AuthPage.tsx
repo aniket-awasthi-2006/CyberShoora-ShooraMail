@@ -1,7 +1,9 @@
+'use client'
+
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Lock, ArrowRight, AlertCircle } from 'lucide-react';
-import { View, ThemeMode } from '../App';
+import { View, ThemeMode } from '../types';
 import { LogoBlack, LogoWhite } from './Logo';
 import api from '../axios';
 
@@ -14,7 +16,7 @@ interface UserData {
 }
 
 interface AuthPageProps {
-  onNavigate: (v: View, data?: UserData) => void;
+  onNavigate: (path: string, data?: UserData) => void;
   themeMode: ThemeMode;
   customTextColor?: string;
   customBgColor?: string;
@@ -66,7 +68,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onNavigate, themeMode, customTextCo
         localStorage.setItem('password', formData.password);
 
         // Redirect user
-        onNavigate('dashboard' as View, {
+        onNavigate('/dashboard', {
           userName: data.userName || 'ShooraMail User',
           email: formData.email,
           inboxMails: mails
