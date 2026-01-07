@@ -1,68 +1,8 @@
 import express from 'express';
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
-import { fetchInbox, fetchEmailsByFolder, markAsRead, deleteEmail, moveEmail, toggleStarred, toggleImportant, saveDraft, saveSentEmail } from '../services/imapService.js';
+import { fetchInbox, fetchEmailsByFolder, markAsRead, deleteEmail, moveEmail, toggleStarred, toggleImportant, saveDraft, saveSentEmail, downloadAttachment } from '../services/imapService.js';
 import { sendEmail, replyEmail, forwardEmail } from '../services/smtpService.js';
 
 const router = express.Router();
-
-// Configure multer for file uploads
-const uploadsDir = path.join(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadsDir);
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
-    }
-});
-
-const upload = multer({
-    storage: storage,
-    limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB limit
-    },
-    fileFilter: (req, file, cb) => {
-        // Allow common file types
-        const allowedTypes = [
-            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-            'application/pdf',
-            'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'text/plain', 'text/csv',
-            'video/mp4', 'video/avi', 'video/mov',
-            'audio/mp3', 'audio/wav', 'audio/ogg'
-        ];
-        
-        if (allowedTypes.includes(file.mimetype)) {
-            cb(null, true);
-        } else {
-            cb(new Error('Invalid file type. Only images, PDFs, documents, and media files are allowed.'), false);
-        }
-    }
-});
-
-// Error handling middleware for multer
-const handleMulterError = (error, req, res, next) => {
-    if (error instanceof multer.MulterError) {
-        if (error.code === 'LIMIT_FILE_SIZE') {
-            return res.status(400).json({ success: false, message: 'File size too large. Maximum size is 10MB.' });
-        }
-        if (error.code === 'LIMIT_FILE_COUNT') {
-            return res.status(400).json({ success: false, message: 'Too many files. Maximum is 5 files.' });
-        }
-        if (error.code === 'LIMIT_UNEXPECTED_FILE') {
-            return res.status(400).json({ success: false, message: 'Unexpected file field.' });
-        }
-    }
-    next(error);
-};
 
 // Login and Fetch Initial Emails
 router.post('/login-fetch', async (req, res) => {
@@ -328,52 +268,111 @@ router.post('/delete-mail', async (req, res) => {
     }
 });
 
-// Upload Attachments
-router.post('/upload-attachments', upload.array('files', 5), async (req, res) => {
-    try {
-        console.log('Upload request received:', req.files);
-        console.log('Request body:', req.body);
-        
-        if (!req.files || req.files.length === 0) {
-            console.log('No files in request');
-            return res.status(400).json({ success: false, message: 'No files uploaded' });
-        }
-
-        const uploadedFiles = req.files.map(file => {
-            console.log('Processing file:', file.originalname, file.mimetype, file.size);
-            return {
-                filename: file.originalname,
-                path: file.path,
-                size: file.size,
-                mimetype: file.mimetype,
-                url: `${process.env.BACKEND_URL || 'http://localhost:5000'}/uploads/${file.filename}`
-            };
-        });
-
-        console.log('Files processed successfully:', uploadedFiles.length);
-        
-        res.status(200).json({ 
-            success: true, 
-            message: 'Files uploaded successfully',
-            files: uploadedFiles
-        });
-    } catch (error) {
-        console.error('Upload error:', error);
-        res.status(500).json({ success: false, message: error.message || 'Failed to upload files' });
-    }
-});
-
-// Apply error handling middleware after the route
-router.use(handleMulterError);
-
 // Move Email to Folder
 router.post('/move-mail', async (req, res) => {
-    const { email, password, messageId, destinationFolder } = req.body;
+    const { email, password, messageId, destinationFolder, sourceFolder } = req.body;
     try {
-        await moveEmail(email, password, messageId, destinationFolder);
+        await moveEmail(email, password, messageId, destinationFolder, sourceFolder);
         res.status(200).json({ success: true, message: "Email moved successfully" });
     } catch (error) {
         res.status(500).json({ success: false, message: "Failed to move email" });
+    }
+});
+
+// Test IMAP Connection
+router.post('/test-imap', async (req, res) => {
+    const { email, password } = req.body;
+    
+    console.log('Testing IMAP connection for:', email ? '***@***' : 'missing');
+    
+    if (!email || !password) {
+        return res.status(400).json({ success: false, message: "Email and password required" });
+    }
+    
+    try {
+        // Import getClient directly
+        const { ImapFlow } = await import('imapflow');
+        const dotenv = await import('dotenv');
+        dotenv.config();
+        
+        const client = new ImapFlow({
+            host: process.env.IMAP_HOST || 'imap.cybershoora.com',
+            port: parseInt(process.env.IMAP_PORT) || 993,
+            secure: process.env.IMAP_SECURE === 'true',
+            tls: {
+                rejectUnauthorized: false
+            },
+            auth: {
+                user: email,
+                pass: password,
+            },
+            logger: true
+        });
+        
+        console.log('Attempting to connect...');
+        await client.connect();
+        console.log('Connection successful!');
+        
+        // Test basic mailbox access
+        let lock = await client.getMailboxLock('INBOX');
+        console.log('Mailbox lock acquired');
+        
+        const status = await client.status('INBOX', { messages: true });
+        console.log('Mailbox status:', status);
+        
+        lock.release();
+        await client.logout();
+        console.log('Connection closed successfully');
+        
+        res.json({ 
+            success: true, 
+            message: "IMAP connection successful",
+            mailboxInfo: {
+                totalMessages: status.messages,
+                mailbox: 'INBOX'
+            }
+        });
+    } catch (error) {
+        console.error('IMAP connection test failed:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: "IMAP connection failed",
+            error: error.message 
+        });
+    }
+});
+
+// Download Attachment
+router.post('/download-attachment', async (req, res) => {
+    const { email, password, uid, folder, index, filename } = req.body;
+    
+    console.log('Download request:', { email: email ? '***@***' : 'missing', password: password ? '***' : 'missing', uid, folder, index, filename });
+    
+    if (!email || !password) {
+        console.log('Missing credentials error');
+        return res.status(400).json({ success: false, message: "User credentials required" });
+    }
+    
+    try {
+        console.log('Attempting to download attachment...');
+        // Ensure folder is properly formatted for IMAP
+        const imapFolder = (folder === 'inbox' ? 'INBOX' : folder?.toUpperCase()) || 'INBOX';
+        console.log('Using folder:', imapFolder);
+        
+        const attachment = await downloadAttachment(email, password, uid, imapFolder, parseInt(index));
+        
+        console.log('Attachment found:', { filename: attachment.filename, size: attachment.size, contentType: attachment.contentType });
+        
+        // Set appropriate headers
+        res.setHeader('Content-Type', attachment.contentType);
+        res.setHeader('Content-Disposition', `${attachment.contentDisposition}; filename="${attachment.filename}"`);
+        res.setHeader('Content-Length', attachment.size);
+        
+        // Send the attachment content
+        res.send(attachment.content);
+    } catch (error) {
+        console.error('Download attachment error:', error);
+        res.status(500).json({ success: false, message: "Failed to download attachment", error: error.message });
     }
 });
 

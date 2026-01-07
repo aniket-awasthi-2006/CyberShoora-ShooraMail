@@ -2,6 +2,8 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import dotenv from 'dotenv';
 import MailComposer from 'nodemailer/lib/mail-composer/index.js';
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
 
@@ -11,9 +13,9 @@ dotenv.config();
 // Here we follow your pattern of "Connect -> Do Work -> Disconnect".
 const getClient = (email, password) => {
     return new ImapFlow({
-        host: 'imap.stackmail.com', // Your host
-        port: 993,
-        secure: true,
+        host: process.env.IMAP_HOST || 'imap.cybershoora.com', // Use environment variable
+        port: parseInt(process.env.IMAP_PORT) || 993,
+        secure: process.env.IMAP_SECURE === 'true',
         tls: {
             rejectUnauthorized: false // Matches your previous config
         },
@@ -21,11 +23,11 @@ const getClient = (email, password) => {
             user: email,
             pass: password,
         },
-        logger: false // Set to true if you want to see debug logs in terminal
+        logger: true // Enable detailed logging for debugging
     });
 };
 
-const parseEmail = async (message, source) => {
+const parseEmail = async (message, source, folder = 'inbox') => {
     // 'source' is the raw email buffer provided by ImapFlow
     const mail = await simpleParser(source);
 
@@ -37,6 +39,34 @@ const parseEmail = async (message, source) => {
     const toemailMatch = mail.to?.text.match(/<([^>]*)>/);
     const toemailName = toemailMatch ? toemailMatch[1] : (mail.to?.text.split('@')[0].trim() || 'Unknown');
     const toemailEmail = toemailMatch ? toemailMatch[1] : (mail.to?.text || '');
+
+    // Process attachments without saving to disk - create direct download links
+    const processedAttachments = [];
+    if (mail.attachments && mail.attachments.length > 0) {
+        for (let i = 0; i < mail.attachments.length; i++) {
+            const attachment = mail.attachments[i];
+            try {
+                // Create direct download link using IMAP message data
+                const imapFolder = folder === 'inbox' ? 'INBOX' : folder.toUpperCase();
+                const downloadUrl = `/api/download-attachment?uid=${message.uid}&folder=${imapFolder}&index=${i}&filename=${encodeURIComponent(attachment.filename || `attachment-${i}`)}`;
+                
+                processedAttachments.push({
+                    filename: attachment.filename || `attachment-${i}`,
+                    originalFilename: attachment.filename,
+                    size: attachment.size || (attachment.content ? attachment.content.length : 0),
+                    contentType: attachment.contentType,
+                    url: downloadUrl,
+                    contentId: attachment.contentId,
+                    contentDisposition: attachment.contentDisposition,
+                    // Store content as base64 for inline preview if needed
+                    content: attachment.content && attachment.content.length < 1024 * 1024 ? attachment.content.toString('base64') : null,
+                    isInline: attachment.contentDisposition === 'inline'
+                });
+            } catch (error) {
+                console.error('Error processing attachment:', error);
+            }
+        }
+    }
 
     return {
         id: message.uid, // ImapFlow provides UID directly on the message object
@@ -52,9 +82,9 @@ const parseEmail = async (message, source) => {
         flagged: message.flags.has('\\Flagged'),
         categoryColor: '#2D62ED',
         category: 'personal',
-        attachments: mail.attachments || [],
+        attachments: processedAttachments,
         avatar: '',
-        folder: 'inbox',
+        folder: folder,
         important: message.flags.has('Important'),
     };
 };
@@ -147,8 +177,7 @@ const fetchEmailsByFolder = async (email, password, folder) => {
 
         if (total > 0) {
             for await (let message of client.fetch(range, { envelope: true, source: true, uid: true, flags: true, internalDate: true })) {
-                const parsed = await parseEmail(message, message.source);
-                parsed.folder = folder;
+                const parsed = await parseEmail(message, message.source, folder);
                 parsedMails.push(parsed);
             }
         }
@@ -281,11 +310,11 @@ const deleteEmail = async (email, password, messageId, folder = 'INBOX') => {
     await client.logout();
 };
 
-const moveEmail = async (email, password, messageId, destinationFolder) => {
+const moveEmail = async (email, password, messageId, destinationFolder, sourceFolder = 'INBOX') => {
     const client = getClient(email, password);
     await client.connect();
 
-    let lock = await client.getMailboxLock('INBOX');
+    let lock = await client.getMailboxLock(sourceFolder);
     try {
         // messageMove returns a result object, true usually implies success
         await client.messageMove(messageId, destinationFolder, { uid: true });
@@ -296,4 +325,72 @@ const moveEmail = async (email, password, messageId, destinationFolder) => {
     await client.logout();
 };
 
-export { fetchInbox, fetchEmailsByFolder, markAsRead, deleteEmail, moveEmail, toggleStarred, toggleImportant, saveSentEmail, saveDraft };
+const downloadAttachment = async (email, password, uid, folder, index) => {
+    console.log('downloadAttachment called with:', { email: email ? '***@***' : 'missing', password: password ? '***' : 'missing', uid, folder, index });
+    
+    try {
+        // First, let's just test if we can connect and get basic mailbox info
+        const client = getClient(email, password);
+        
+        console.log('Connecting to IMAP server...');
+        await client.connect();
+        console.log('IMAP connection successful');
+        
+        try {
+            console.log('Getting mailbox lock for folder:', folder);
+            let lock = await client.getMailboxLock(folder);
+            console.log('Mailbox lock acquired');
+            
+            try {
+                console.log('Fetching message with UID:', uid);
+                // Fetch the specific message with full source
+                const message = await client.fetchOne(uid, { source: true, uid: true });
+                console.log('Message fetched, has source:', !!message.source);
+                
+                if (!message || !message.source) {
+                    throw new Error('Message not found');
+                }
+                
+                console.log('Parsing email message...');
+                // Parse the email to get attachments
+                const mail = await simpleParser(message.source);
+                console.log('Email parsed, attachments count:', mail.attachments ? mail.attachments.length : 0);
+                
+                if (!mail.attachments || mail.attachments.length === 0) {
+                    throw new Error('No attachments found in email');
+                }
+                
+                if (index >= mail.attachments.length) {
+                    throw new Error(`Attachment index ${index} out of range (total: ${mail.attachments.length})`);
+                }
+                
+                const attachment = mail.attachments[index];
+                console.log('Found attachment:', { 
+                    filename: attachment.filename, 
+                    size: attachment.size ? attachment.size.length : 0,
+                    contentType: attachment.contentType 
+                });
+                
+                return {
+                    filename: attachment.filename || `attachment-${index}`,
+                    contentType: attachment.contentType || 'application/octet-stream',
+                    content: attachment.content,
+                    size: attachment.size || (attachment.content ? attachment.content.length : 0),
+                    contentDisposition: attachment.contentDisposition || 'attachment'
+                };
+            } finally {
+                lock.release();
+                console.log('Mailbox lock released');
+            }
+        } finally {
+            await client.logout();
+            console.log('IMAP connection closed');
+        }
+    } catch (error) {
+        console.error('Error in downloadAttachment:', error);
+        // Return a more detailed error for debugging
+        throw new Error(`DownloadAttachment failed: ${error.message}`);
+    }
+};
+
+export { fetchInbox, fetchEmailsByFolder, markAsRead, deleteEmail, moveEmail, toggleStarred, toggleImportant, saveSentEmail, saveDraft, downloadAttachment };

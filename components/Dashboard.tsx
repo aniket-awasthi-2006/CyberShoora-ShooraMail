@@ -8,7 +8,7 @@ import {
   ChevronDown, MoreHorizontal, Reply, Forward, Mails, Pin,
   Plus, Circle, LogOut, Sun, Moon, Palette, ArrowLeft, X, Check, Loader2,
   Settings, Bell, Shield, HelpCircle, Inbox, RefreshCw,
-  Clock, Calendar, Archive, AlertCircle, RotateCcw
+  Clock, Calendar, Archive, AlertCircle, RotateCcw, Eye, Paperclip
 } from 'lucide-react';
 import 'react-quill/dist/quill.snow.css';
 import { ThemeMode } from '../types';
@@ -187,13 +187,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
   const [isMobile, setIsMobile] = useState(false);
   const [isComposeMode, setIsComposeMode] = useState(false);
   const [isHtmlMode, setIsHtmlMode] = useState(false);
-  const [attachments, setAttachments] = useState<any[]>([]);
   const [isDeleteWarningOpen, setIsDeleteWarningOpen] = useState(false);
   const [isLogoutWarningOpen, setIsLogoutWarningOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [toasts, setToasts] = useState<{ id: string, message: string, type: 'success' | 'error' }[]>([]);
   const [composeData, setComposeData] = useState<{ to: string; subject: string; body: string; html?: string; id?: string }>({ to: '', subject: '', body: '' });
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isReloading, setIsReloading] = useState(false);
   const [settings, setSettings] = useState({ notifications: true, autoReply: false });
   const [isColorPaletteOpen, setIsColorPaletteOpen] = useState(false);
@@ -302,7 +300,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
       setMessages(prev => prev.map(m => m.id === selectedMail.id ? { ...m, folder: 'trash' } : m));
       setSelectedMailId(null);
       showToast('Moved to trash', 'success');
-      api.post('/api/move-mail', { messageId: selectedMail.id, email: userData.email, password: localStorage.getItem('password'), destinationFolder: 'Trash' }).catch(() => {
+      const sourceFolder = selectedMail.folder === 'sent' ? 'Sent' : selectedMail.folder === 'inbox' ? 'INBOX' : selectedMail.folder === 'drafts' ? 'Drafts' : 'INBOX';
+      api.post('/api/move-mail', { messageId: selectedMail.id, email: userData.email, password: localStorage.getItem('password'), destinationFolder: 'Trash', sourceFolder: sourceFolder }).catch(() => {
         showToast('Failed to move to trash', 'error');
         // Revert logic could be added here
       });
@@ -315,7 +314,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     setSelectedMailId(null);
     setIsDeleteWarningOpen(false);
     showToast('Deleted permanently', 'success');
-    api.post('/api/delete-mail', { messageId: selectedMail.id, email: userData.email, password: localStorage.getItem('password'), folder: selectedMail.folder === 'trash' ? 'Trash' : 'INBOX' }).catch(() => {
+    const folderToDelete = selectedMail.folder === 'trash' ? 'Trash' : selectedMail.folder;
+    api.post('/api/delete-mail', { messageId: selectedMail.id, email: userData.email, password: localStorage.getItem('password'), folder: folderToDelete }).catch(() => {
       showToast('Failed to delete', 'error');
     });
   };
@@ -406,7 +406,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
               flagged: mail.flagged,
               categoryColor: '#2D62ED',
               category: assignedCategory,
-              attachments: !!mail.attachments && mail.attachments.length > 0,
+              attachments: mail.attachments || [],
               avatar: `https://i.pravatar.cc/100?u=${senderAddress}`,
               folder: mail.folder as any,
               important: mail.important,
@@ -472,7 +472,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
             flagged: mail.flagged,
             categoryColor: '#2D62ED',
             category: assignedCategory,
-            attachments: !!mail.attachments && mail.attachments.length > 0,
+            attachments: mail.attachments || [], // Fix: Preserve actual attachment data instead of converting to boolean
             avatar: `https://i.pravatar.cc/100?u=${senderAddress}`,
             folder: currentFolder as any,
             important: mail.important, // Could be set based on some logic or randomly for demo
@@ -507,8 +507,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
         body: composeData.body,
         html: htmlContent,
         email: userData.email, 
-        password: localStorage.getItem('password'),
-        attachments: attachments.length > 0 ? attachments : undefined
+        password: localStorage.getItem('password')
       });
       showToast('Email sent successfully', 'success');
 
@@ -525,58 +524,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
         folder: 'sent',
         avatar: `https://i.pravatar.cc/100?u=${userData.email}`,
         unread: false,
-        attachments: attachments.length > 0,
-        isHtml: true // Always mark as HTML since we're sending HTML
+        isHtml: true 
       };
       setMessages(prev => [sentMsg, ...prev]);
       setIsComposeMode(false);
       setComposeData({ to: '', subject: '', body: '', html: '' });
-      setAttachments([]);
       setIsHtmlMode(false);
     } catch (e) {
       showToast('Failed to send email', 'error');
-    } finally {
-      setIsReloading(false);
     }
-  };
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    const formData = new FormData();
-    Array.from(files).forEach(file => {
-      formData.append('files', file);
-    });
-    formData.append('email', userData.email);
-
-    try {
-      const response = await api.post('/api/upload-attachments', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      if (response.data.success) {
-        setAttachments(prev => [...prev, ...response.data.files]);
-        showToast('Files uploaded successfully', 'success');
-      } else {
-        showToast(response.data.message || 'Failed to upload files', 'error');
-      }
-    } catch (error: any) {
-      console.error('Upload error:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to upload files';
-      showToast(errorMessage, 'error');
-    }
-
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const removeAttachment = (index: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSaveDraft = async () => {
@@ -613,7 +569,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     setIsComposeMode(false);
     setComposeData({ to: '', subject: '', body: '', html: '' });
     setSelectedMailId(null);
-    setAttachments([]);
     setIsHtmlMode(false);
 
     if (draftId) {
@@ -643,8 +598,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
       api.post('/api/delete-mail', { messageId: mail.id, email: userData.email, password: localStorage.getItem('password'), folder: 'Drafts' }).catch(() => { });
       showToast('Draft deleted', 'success');
     } else {
+      // For sent, inbox, and other folders - move to trash first
       setMessages(prev => prev.map(m => m.id === mail.id ? { ...m, folder: 'trash' } : m));
-      api.post('/api/move-mail', { messageId: mail.id, email: userData.email, password: localStorage.getItem('password'), destinationFolder: 'Trash' }).catch(() => { });
+      const sourceFolder = mail.folder === 'sent' ? 'Sent' : mail.folder === 'inbox' ? 'INBOX' : mail.folder === 'drafts' ? 'Drafts' : 'INBOX';
+      api.post('/api/move-mail', { messageId: mail.id, email: userData.email, password: localStorage.getItem('password'), destinationFolder: 'Trash', sourceFolder: sourceFolder }).catch(() => { });
       showToast('Moved to trash', 'success');
     }
   };
@@ -676,6 +633,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     <>
       <style>
         {`@import url('https://fonts.googleapis.com/css2?family=DynaPuff:wght@400..700&display=swap');`}
+        {`
+          .ql-editor {
+            color: #000000 !important;
+          }
+          .ql-container.ql-snow {
+            border: 1px solid #e9ecef !important;
+          }
+          .ql-toolbar.ql-snow {
+            border: 1px solid #e9ecef !important;
+            border-bottom: none !important;
+          }
+          .ql-editor.ql-blank::before {
+            color: #6c757d !important;
+          }
+        `}
       </style>
       <div className={`flex h-screen w-full overflow-hidden font-sans transition-colors duration-700 ease-in-out`} style={{ backgroundColor: colors.middlePaneBg }}>
         <MotionDiv
@@ -869,8 +841,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                   </button>
                 </div>
                 <div className="flex flex-col gap-6">
-                  <input value={composeData.to} onChange={e => setComposeData({ ...composeData, to: e.target.value })} placeholder="To" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: colors.textMain }} />
-                  <input value={composeData.subject} onChange={e => setComposeData({ ...composeData, subject: e.target.value })} placeholder="Subject" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: colors.textMain }} />
+                  <input value={composeData.to} onChange={e => setComposeData({ ...composeData, to: e.target.value })} placeholder="To" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: '#000000' }} />
+                  <input value={composeData.subject} onChange={e => setComposeData({ ...composeData, subject: e.target.value })} placeholder="Subject" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: '#000000' }} />
                   
                   {/* HTML/Text Mode Toggle */}
                   <div className="flex items-center justify-between p-2 rounded-xl border" style={{ borderColor: colors.border, backgroundColor: colors.inputBg }}>
@@ -900,7 +872,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                       onChange={e => setComposeData({ ...composeData, html: e.target.value })} 
                       placeholder="Compose HTML Message...." 
                       className="w-full p-4 rounded-xl border bg-transparent outline-none resize-none transition-colors" 
-                      style={{ borderColor: colors.border, color: colors.textMain, height: '500px' }}
+                      style={{ borderColor: colors.border, color: '#000000', height: '500px' }}
                     />
                   ) : (
                     <div className="rounded-xl border overflow-hidden transition-colors" style={{ borderColor: colors.border }}>
@@ -910,61 +882,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                         modules={quillModules}
                         formats={quillFormats}
                         placeholder="Compose your Message..."
-                        style={{ height: '500px' }}
+                        style={{ height: '500px' , background: 'white'}}
                         theme="snow"
                       />
                     </div>
                   )}
-
-                  {/* Attachments */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold" style={{ color: colors.textMain }}>Attachments:</span>
-                      <div className="flex gap-2">
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          multiple
-                          onChange={handleFileUpload}
-                          accept="image/*,.pdf,.doc,.docx,.txt,.csv,video/*,audio/*"
-                          className="hidden"
-                        />
-                        <button
-                          onClick={() => fileInputRef.current?.click()}
-                          className="px-3 py-1 rounded-lg text-sm font-bold transition-all hover:scale-105"
-                          style={{ backgroundColor: colors.itemActiveBg, color: colors.primary }}
-                        >
-                          <Plus className="w-4 h-4 inline mr-1" />
-                          Add Files
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {attachments.length > 0 && (
-                      <div className="space-y-2 max-h-32 overflow-y-auto">
-                        {attachments.map((attachment, index) => (
-                          <div key={index} className="flex items-center justify-between p-2 rounded-lg border" style={{ borderColor: colors.border, backgroundColor: colors.inputBg }}>
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4" style={{ color: colors.textMuted }} />
-                              <span className="text-sm truncate" style={{ color: colors.textMain }}>
-                                {attachment.filename}
-                              </span>
-                              <span className="text-xs opacity-60" style={{ color: colors.textMuted }}>
-                                ({(attachment.size / 1024).toFixed(1)} KB)
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => removeAttachment(index)}
-                              className="p-1 rounded hover:bg-red-500/10 text-red-500 transition-colors"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
                   <div className="flex items-center justify-end">
                     <div className="flex gap-4">
                       <button onClick={handleSaveDraft} disabled={isReloading} className="px-6 py-2.5 rounded-xl font-bold shadow-lg hover:scale-105 transition-all flex items-center gap-2" style={{ backgroundColor: colors.itemActiveBg, color: colors.primary }}>
@@ -992,10 +914,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                       <button onClick={handleRestore} className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : ''}`} title="Restore"><RotateCcw className="w-5 h-5 opacity-60" /></button>
                     ) : (
                       <>
-                        <button className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : ''}`} title="Reply"><Reply className="w-5 h-5 opacity-60" /></button>
-                        <button className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : ''}`} title="Forward"><Forward className="w-5 h-5 opacity-60" /></button>
-                        <button onClick={handleImportant} className="p-2 rounded-lg hover:bg-black/5 transition-colors duration-700" title="Mark as Important"><Pin className={`w-5 h-5 transition-all duration-700 ${selectedMail.important ? 'fill-red-500 text-red-500 opacity-100' : 'opacity-60'} ${themeMode === 'colored' ? 'text-[#2D62ED]' : ''}`} /></button>
-                        <button onClick={handleStar} className="p-2 rounded-lg hover:bg-black/5 transition-colors duration-700" title="Star"><Star className={`w-5 h-5 transition-all duration-700 ${selectedMail.flagged ? 'fill-yellow-400 text-yellow-400 opacity-100' : 'opacity-60'} ${themeMode === 'colored' ? 'text-[#2D62ED]' : ''}`} /></button>
+                        <button className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`} title="Reply"><Reply className="w-5 h-5 opacity-60" /></button>
+                        <button className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`} title="Forward"><Forward className="w-5 h-5 opacity-60" /></button>
+                        <button onClick={handleImportant} className="p-2 rounded-lg hover:bg-black/5 transition-colors duration-700" title="Mark as Important"><Pin className={`w-5 h-5 transition-all duration-700 ${selectedMail.important ? 'fill-red-500 text-red-500 opacity-100' : 'opacity-60'} ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`} /></button>
+                        <button onClick={handleStar} className="p-2 rounded-lg hover:bg-black/5 transition-colors duration-700" title="Star"><Star className={`w-5 h-5 transition-all duration-700 ${selectedMail.flagged ? 'fill-yellow-400 text-yellow-400 opacity-100' : 'opacity-60'} ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`} /></button>
                       </>
                     )}
                     <button onClick={handleDelete} className="p-2 rounded-lg hover:bg-black/5 transition-colors duration-700" title={selectedMail.folder === 'trash' ? "Delete Permanently" : "Delete"}><Trash2 className="w-5 h-5 opacity-60 text-red-400" /></button>
@@ -1027,17 +949,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                       </div>
                     </div>
                     <div className="sm:text-right">
-                      <p className="text-xs font-bold uppercase tracking-widest opacity-40 mb-1 transition-colors duration-700" style={{ color: colors.textMuted }}>{selectedMail.toEmail === userData.email ? "Received" : "Sent"}</p>
                       <p className="text-sm font-black transition-colors duration-700" style={{ color: colors.textMain }}>{selectedMail.date}, 10:24 AM</p>
                     </div>
                   </div>
 
                   <div className="space-y-8 text-lg md:text-xl leading-[1.6] font-medium transition-colors duration-700" style={{ color: colors.textMain }}>
-                    {selectedMail.isHtml ? (
-                      <div dangerouslySetInnerHTML={{ __html: selectedMail.body }}></div>
-                    ) : (
-                      <p>{selectedMail.body}</p>
-                    )}
+                    <div dangerouslySetInnerHTML={{ __html: selectedMail.body }}></div>
                   </div>
 
                   {/* Attachments Section */}
@@ -1048,35 +965,148 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                         Attachments ({selectedMail.attachments.length})
                       </h4>
                       <div className="space-y-2">
-                        {selectedMail.attachments.map((attachment: any, index: number) => (
-                          <div key={index} className="flex items-center justify-between p-3 rounded-lg border" style={{ borderColor: colors.border, backgroundColor: colors.rightPaneBg }}>
-                            <div className="flex items-center gap-3">
-                              <FileText className="w-5 h-5" style={{ color: colors.textMuted }} />
-                              <div>
-                                <p className="text-sm font-bold" style={{ color: colors.textMain }}>
-                                  {attachment.filename || attachment.name || `Attachment ${index + 1}`}
-                                </p>
-                                <p className="text-xs opacity-60" style={{ color: colors.textMuted }}>
-                                  {attachment.size ? `${(attachment.size / 1024).toFixed(1)} KB` : 'Unknown size'}
-                                </p>
+                        {selectedMail.attachments.map((attachment, index) => {
+                          console.log('Attachment data:', attachment);
+                          console.log('Attachment URL:', attachment.url);
+                          
+                          return (
+                            <div key={index} className="flex items-center justify-between p-3 rounded-lg border" style={{ borderColor: colors.border, backgroundColor: colors.rightPaneBg }}>
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: colors.inputBg }}>
+                                  <Paperclip className="w-5 h-5" style={{ color: colors.primary }} />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold" style={{ color: colors.textMain }}>
+                                    {attachment.filename || attachment.name || `Attachment ${index + 1}`}
+                                  </p>
+                                  <p className="text-xs opacity-60" style={{ color: colors.textMuted }}>
+                                    {attachment.size ? `${(attachment.size / 1024).toFixed(1)} KB` : 'Unknown size'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  className="px-3 py-1 rounded-lg text-xs font-bold transition-all hover:scale-105"
+                                  style={{ backgroundColor: colors.itemActiveBg, color: colors.primary }}
+                                  onClick={async () => {
+                                    try {
+                                      console.log('Full attachment object:', attachment);
+                                      
+                                      // Parse the URL to extract parameters
+                                      if (!attachment.url) {
+                                        throw new Error('Attachment URL is missing');
+                                      }
+                                      
+                                      const urlParams = new URLSearchParams(attachment.url.split('?')[1]);
+                                      const uid = urlParams.get('uid');
+                                      const folder = urlParams.get('folder');
+                                      const index = urlParams.get('index');
+                                      const filename = urlParams.get('filename');
+                                      
+                                      console.log('Parsed URL params:', { uid, folder, index, filename });
+                                      
+                                      if (!uid || uid === '123' || uid === 'undefined') {
+                                        throw new Error('Invalid attachment UID - this might be test data');
+                                      }
+                                      
+                                      const downloadData = {
+                                        email: userData.email,
+                                        password: localStorage.getItem('password'),
+                                        uid: uid,
+                                        folder: folder,
+                                        index: index,
+                                        filename: filename
+                                      };
+                                      
+                                      console.log('Sending download request:', { ...downloadData, password: '***' });
+                                      
+                                      const response = await fetch('/api/download-attachment', {
+                                        method: 'POST',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify(downloadData)
+                                      });
+                                      
+                                      if (!response.ok) {
+                                        const errorData = await response.json().catch(() => ({}));
+                                        throw new Error(errorData.message || 'Preview failed');
+                                      }
+                                      
+                                      // Get the blob from response
+                                      const blob = await response.blob();
+                                      
+                                      // Create preview URL
+                                      const url = window.URL.createObjectURL(blob);
+                                      window.open(url, '_blank');
+                                      
+                                      // Clean up after a delay
+                                      setTimeout(() => {
+                                        window.URL.revokeObjectURL(url);
+                                      }, 1000);
+                                      
+                                    } catch (error) {
+                                      console.error('Preview error:', error);
+                                      showToast(`Preview failed: ${error.message}`, 'error');
+                                    }
+                                  }}
+                                >
+                                  Preview
+                                </button>
+                                <button
+                                  className="px-3 py-1 rounded-lg text-xs font-bold transition-all hover:scale-105"
+                                  style={{ backgroundColor: colors.primary, color: 'white' }}
+                                  onClick={async () => {
+                                    try {
+                                      // Parse the URL to extract parameters
+                                      const urlParams = new URLSearchParams(attachment.url.split('?')[1]);
+                                      const downloadData = {
+                                        email: userData.email,
+                                        password: localStorage.getItem('password'),
+                                        uid: urlParams.get('uid'),
+                                        folder: urlParams.get('folder'),
+                                        index: urlParams.get('index'),
+                                        filename: urlParams.get('filename')
+                                      };
+                                      
+                                      const response = await fetch('/api/download-attachment', {
+                                        method: 'POST',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify(downloadData)
+                                      });
+                                      
+                                      if (!response.ok) {
+                                        throw new Error('Download failed');
+                                      }
+                                      
+                                      // Get the blob from response
+                                      const blob = await response.blob();
+                                      
+                                      // Create download link
+                                      const url = window.URL.createObjectURL(blob);
+                                      const link = document.createElement('a');
+                                      link.href = url;
+                                      link.download = attachment.filename || `attachment-${index}`;
+                                      document.body.appendChild(link);
+                                      link.click();
+                                      document.body.removeChild(link);
+                                      window.URL.revokeObjectURL(url);
+                                      
+                                      showToast('Attachment downloaded successfully', 'success');
+                                    } catch (error) {
+                                      console.error('Download error:', error);
+                                      showToast('Failed to download attachment', 'error');
+                                    }
+                                  }}
+                                >
+                                  Download
+                                </button>
                               </div>
                             </div>
-                            <button
-                              className="px-3 py-1 rounded-lg text-xs font-bold transition-all hover:scale-105"
-                              style={{ backgroundColor: colors.primary, color: 'white' }}
-                              onClick={() => {
-                                const link = document.createElement('a');
-                                link.href = attachment.url || `/uploads/${attachment.filename}`;
-                                link.download = attachment.filename || `attachment-${index}`;
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                              }}
-                            >
-                              Download
-                            </button>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}

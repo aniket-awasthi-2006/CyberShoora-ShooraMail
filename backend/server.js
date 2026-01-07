@@ -16,15 +16,12 @@ app.use(cors({
     credentials: true
 }));
 
-// Serve uploaded files BEFORE body parser for upload routes
-app.use('/uploads', express.static('uploads'));
-
-// Routes BEFORE body parser to allow multer to process multipart data
-app.use('/api', mailRoutes);
-
-// Body parser middleware - place AFTER routes that need multer
+// Body parser middleware - place BEFORE routes that need JSON parsing
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Routes
+app.use('/api', mailRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -39,4 +36,15 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
     console.log(`Webmail Backend running on http://localhost:${PORT}`);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Rejection:', err);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+    process.exit(1);
 });
