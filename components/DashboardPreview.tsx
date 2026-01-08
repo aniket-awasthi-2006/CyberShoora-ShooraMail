@@ -109,7 +109,7 @@ const DashboardPreview: React.FC<DashboardPreviewProps> = ({ onOpenApp, themeMod
       </MotionDiv>
 
       {/* Floating Exploration Hint - Text with Gradient */}
-      <div className={`absolute -bottom-8 left-1/2 -translate-x-1/2 px-12 py-5 rounded-full text-[12px] font-black tracking-[0.4em] uppercase shadow-2xl z-30 opacity-0 group-hover:opacity-100 translate-y-6 group-hover:translate-y-0 transition-all duration-1000 pointer-events-none whitespace-nowrap ${
+      <div className={`absolute -bottom-8 left-1/2 -translate-x-1/2 px-12 py-5 rounded-full text-[12px] font-black tracking-[0.4em] uppercase shadow-2xl z-30 opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all duration-1000 pointer-events-none whitespace-nowrap ${
         // Button background color
         themeMode === 'colored' ? 'bg-[#2D62ED]' :
           themeMode === 'dark' ? 'bg-white' :

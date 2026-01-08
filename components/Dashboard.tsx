@@ -4,11 +4,9 @@ import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import {
-  Menu, Search, Star, Send, FileText, Trash2, Mail,
-  ChevronDown, MoreHorizontal, Reply, Forward, Mails, Pin,
+  Menu, Search, Star, Send, FileText, Trash2, Mail, MoreVertical, Reply, Forward, Mails, Pin,
   Plus, Circle, LogOut, Sun, Moon, Palette, ArrowLeft, X, Check, Loader2,
-  Settings, Bell, Shield, HelpCircle, Inbox, RefreshCw,
-  Clock, Calendar, Archive, AlertCircle, RotateCcw, Eye, Paperclip
+  Settings, Copy , Shield, Inbox, RefreshCw, AlertCircle, RotateCcw, Eye, Paperclip
 } from 'lucide-react';
 import 'react-quill/dist/quill.snow.css';
 import { ThemeMode } from '../types';
@@ -188,6 +186,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
   const [isComposeMode, setIsComposeMode] = useState(false);
   const [isHtmlMode, setIsHtmlMode] = useState(false);
   const [isDeleteWarningOpen, setIsDeleteWarningOpen] = useState(false);
+  const [isJunkWarningOpen, setIsJunkWarningOpen] = useState(false);
   const [isLogoutWarningOpen, setIsLogoutWarningOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [toasts, setToasts] = useState<{ id: string, message: string, type: 'success' | 'error' }[]>([]);
@@ -198,6 +197,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
   const [showTooltip, setShowTooltip] = useState(false);
   const [tempCustomTextColor, setTempCustomTextColor] = useState(customTextColor);
   const [tempCustomBgColor, setTempCustomBgColor] = useState(customBgColor);
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
 
   const textColors = ['#72bad5', '#0e4c6d', '#03324e', '#ef4043', '#be1e2d', '#c43240', '#ff8c00'];
   const bgColors = ['#84e3c8', '#dcedc1', '#b6e2dd', '#FFFFFF'];
@@ -232,8 +232,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
   };
 
   useEffect(() => {
+    // fetch when user data is available and folder changes
     fetchMessages();
-  }, [activeFolder]);
+  }, [activeFolder, userData]);
 
   // Auto-save drafts
   useEffect(() => {
@@ -347,9 +348,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
   };
 
   const fetchMessages = async () => {
+    if (!userData?.email) return;
+    const password = localStorage.getItem('password');
+    if (!password) return;
+
     setIsReloading(true);
     try {
-      const password = localStorage.getItem('password');
       let endpoint = '/api/inbox-fetch';
       let payload: any = { email: userData.email, password: password || '' };
       let currentFolder = 'inbox';
@@ -627,6 +631,82 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     }
 
     return { background: 'transparent', color: 'inherit' };
+  };
+
+  const handleDownloadPdf = () => {
+    if (!selectedMail) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html>
+        <head><title>${selectedMail.subject}</title></head>
+        <body>
+          <h1>${selectedMail.subject}</h1>
+          <div>${selectedMail.body}</div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
+  const handleMarkUnread = () => {
+    if (!selectedMail) return;
+    setMessages(prev => prev.map(m => m.id === selectedMail.id ? { ...m, unread: true } : m));
+    showToast('Marked as unread', 'success');
+  };
+
+  const handleOpenInNewPage = () => {
+    if (!selectedMail) return;
+    const newWin = window.open('', '_blank');
+    if (!newWin) return;
+    newWin.document.write(`
+      <html>
+        <head><title>${selectedMail.subject}</title></head>
+        <body>
+          <h1>${selectedMail.subject}</h1>
+          <div>${selectedMail.body}</div>
+        </body>
+      </html>
+    `);
+    newWin.document.close();
+  };
+
+  const handleCopyContent = async () => {
+    if (!selectedMail) return;
+    const tempElement = document.createElement('div');
+    tempElement.innerHTML = selectedMail.body;
+    const text = tempElement.textContent || tempElement.innerText || selectedMail.body;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Content copied', 'success');
+    } catch (e) {
+      showToast('Copy failed', 'error');
+    }
+  };
+
+  const handleMarkJunk = () => {
+    if (!selectedMail) return;
+    setIsJunkWarningOpen(true);
+  };
+
+  const confirmMarkJunk = () => {
+    if (!selectedMail) return;
+    setMessages(prev => prev.map(m => m.id === selectedMail.id ? { ...m, folder: 'trash' } : m));
+    setSelectedMailId(null);
+    setIsJunkWarningOpen(false);
+    showToast('Moved to junk', 'success');
+    const sourceFolder = selectedMail.folder === 'sent' ? 'Sent' : selectedMail.folder === 'inbox' ? 'INBOX' : selectedMail.folder === 'drafts' ? 'Drafts' : 'INBOX';
+    api.post('/api/move-mail', {
+      messageId: selectedMail.id,
+      email: userData.email,
+      password: localStorage.getItem('password'),
+      destinationFolder: 'Trash',
+      sourceFolder
+    }).catch(() => {
+      showToast('Failed to move to junk', 'error');
+    });
   };
 
   return (
@@ -911,7 +991,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                   </button>
                   <div className="hidden sm:flex gap-1">
                     {selectedMail.folder === 'trash' ? (
-                      <button onClick={handleRestore} className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : ''}`} title="Restore"><RotateCcw className="w-5 h-5 opacity-60" /></button>
+                      <button onClick={handleRestore} className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`} title="Restore"><RotateCcw className="w-5 h-5 opacity-60" /></button>
                     ) : (
                       <>
                         <button className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`} title="Reply"><Reply className="w-5 h-5 opacity-60" /></button>
@@ -927,7 +1007,40 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                   <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-black uppercase tracking-widest transition-all duration-700" style={{ borderColor: colors.border, color: colors.textMuted }}>
                     <Shield className="w-3 h-3 text-green-500" /> Secure
                   </div>
-                  <button className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : ''}`}><MoreHorizontal className="w-5 h-5 opacity-60" /></button>
+                  <div className="relative">
+                    <button
+                      onClick={() => setIsActionMenuOpen(prev => !prev)}
+                      className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`}
+                    >
+                      <MoreVertical className="w-5 h-5 opacity-60" />
+                    </button>
+                    {isActionMenuOpen && (
+                      <div className="absolute right-0 mt-2 w-56 rounded-xl border shadow-2xl bg-white z-30 overflow-hidden">
+                        {[
+                          { label: 'Download as PDF', action: handleDownloadPdf, icon: FileText },
+                          { label: 'Mark as Unread', action: handleMarkUnread, icon: Mail },
+                          { label: 'Open Content in New Page', action: handleOpenInNewPage, icon: Eye },
+                          { label: 'Copy Content', action: handleCopyContent, icon: Copy },
+                          { label: 'Junk', action: handleMarkJunk, icon: Trash2 },
+                        ].map(item => (
+                          <button
+                            key={item.label}
+                            onClick={() => { item.action(); setIsActionMenuOpen(false); }}
+                            className="w-full text-left px-4 py-3 text-sm font-bold hover:bg-black/5 transition-colors flex items-center gap-3"
+                            style={{ 
+                              color: colors.textMain,
+                              backgroundColor: colors.middlePaneBg,
+                              borderColor: colors.border,
+                              
+                            }}
+                          >
+                            <item.icon className="w-4 h-4" />
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1203,6 +1316,27 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
               <div className="flex justify-end gap-3 mt-2">
                 <button onClick={() => setIsDeleteWarningOpen(false)} className="px-4 py-2 rounded-xl font-bold text-sm transition-colors hover:bg-black/5" style={{ color: colors.textMain }}>Cancel</button>
                 <button onClick={confirmDelete} className="px-4 py-2 rounded-xl font-bold text-sm text-white bg-red-500 hover:bg-red-600 transition-colors shadow-lg">Delete</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isJunkWarningOpen && (
+                    <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden flex flex-col p-6 gap-4" style={{ backgroundColor: colors.middlePaneBg }}
+            >
+              <h3 className="text-lg font-bold" style={{ color: colors.textMain }}>Junk! Delete Permanently?</h3>
+              <p className="text-sm" style={{ color: colors.textMuted }}>This action cannot be undone. Are you sure you want to permanently delete this message?</p>
+              <div className="flex justify-end gap-3 mt-2">
+                <button onClick={() => setIsJunkWarningOpen(false)} className="px-4 py-2 rounded-xl font-bold text-sm transition-colors hover:bg-black/5" style={{ color: colors.textMain }}>Cancel</button>
+                <button onClick={() => {confirmDelete(); setIsJunkWarningOpen(false)}} className="px-4 py-2 rounded-xl font-bold text-sm text-white bg-red-500 hover:bg-red-600 transition-colors shadow-lg">Junk</button>
               </div>
             </motion.div>
           </motion.div>

@@ -1,23 +1,19 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Sun, Moon, Palette } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Navbar from '../components/Navbar'
 import Hero from '../components/Hero'
 import DashboardPreview from '../components/DashboardPreview'
+import FloatingThemeSwitcher from '../components/FloatingThemeSwitcher'
+import { useTheme } from '../components/ThemeProvider'
 import { useRouter } from 'next/navigation'
-
-export type ThemeMode = 'light' | 'dark' | 'colored'
 
 const MotionDiv = motion.div as any
 
 const HomePage: React.FC = () => {
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light')
-  const [customTextColor, setCustomTextColor] = useState('#0e4c6d')
-  const [customBgColor, setCustomBgColor] = useState('#FFFFFF')
+  const { themeMode, setThemeMode, customTextColor, setCustomTextColor, customBgColor, setCustomBgColor } = useTheme()
   const [isColorPaletteOpen, setIsColorPaletteOpen] = useState(false)
-  const [showTooltip, setShowTooltip] = useState(false)
   const router = useRouter()
 
   const themeStyles = {
@@ -34,8 +30,8 @@ const HomePage: React.FC = () => {
       border: 'border-[#25282B]'
     },
     colored: {
-      bg: `bg-[${customBgColor}]`,
-      text: `text-[${customTextColor}]`,
+      bg: '',
+      text: '',
       mutedText: 'text-gray-500',
       border: 'border-gray-100'
     }
@@ -61,25 +57,11 @@ const HomePage: React.FC = () => {
     router.push(path)
   }
 
-  const getToggleButtonStyles = (btnMode: ThemeMode) => {
-    const isActive = themeMode === btnMode
-    if (themeMode === 'light') {
-      if (isActive) return { background: '#000000', color: '#ffffff' }
-      return { background: 'transparent', color: '#000000' }
-    }
-    if (themeMode === 'dark') {
-      if (isActive) return { background: '#ffffff', color: '#000000' }
-      return { background: 'transparent', color: '#ffffff' }
-    }
-    if (themeMode === 'colored') {
-      if (isActive) return { background: customBgColor, color: customTextColor }
-      return { background: 'transparent', color: customTextColor }
-    }
-    return { background: 'transparent', color: 'inherit' }
-  }
-
   return (
-    <div className={`relative min-h-screen transition-all duration-700 ease-in-out ${currentTheme.bg} ${currentTheme.text}`}>
+    <div
+      className={`relative min-h-screen transition-all duration-700 ease-in-out ${currentTheme.bg} ${currentTheme.text}`}
+      style={themeMode === 'colored' ? { backgroundColor: customBgColor, color: customTextColor } : {}}
+    >
       <AnimatePresence mode="wait">
         <MotionDiv
           key="navbar"
@@ -110,48 +92,16 @@ const HomePage: React.FC = () => {
             <Hero onNavigate={handleNavigate} themeMode={themeMode} customTextColor={customTextColor} customBgColor={customBgColor} />
           </div>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-16 md:mt-48 pb-48 md:pb-96">
-            <DashboardPreview onOpenApp={() => handleNavigate('/auth/signin')} themeMode={themeMode} customTextColor={customTextColor} customBgColor={customBgColor} />
+            <DashboardPreview onOpenApp={() => handleNavigate('/auth/signin')} themeMode={themeMode} />
           </div>
         </MotionDiv>
       </main>
 
-      <AnimatePresence>
-        <MotionDiv
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          className="fixed bottom-6 left-6 z-[60]"
-        >
-          <div className={`p-1.5 rounded-[24px] border shadow-2xl transition-all duration-700 flex items-center gap-1 backdrop-blur-lg ${themeMode === 'light' ? 'bg-white/90 border-gray-200' :
-            themeMode === 'dark' ? 'bg-[#1A1B1E]/90 border-[#25282B]' :
-              'bg-white/90 border-gray-200'
-            }`}>
-            {(['light', 'dark', 'colored'] as ThemeMode[]).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setThemeMode(mode)}
-                onDoubleClick={mode === 'colored' ? () => setIsColorPaletteOpen(true) : undefined}
-                onMouseEnter={mode === 'colored' ? () => setShowTooltip(true) : undefined}
-                onMouseLeave={mode === 'colored' ? () => setShowTooltip(false) : undefined}
-                className={`p-2 md:p-2.5 rounded-full transition-all duration-500 flex items-center justify-center relative group ${themeMode === mode ? 'shadow-lg scale-110 opacity-100' : 'opacity-60 hover:opacity-100'}`}
-                style={getToggleButtonStyles(mode)}
-              >
-                {mode === 'light' && <Sun className="w-4 h-4 md:w-5 md:h-5" />}
-                {mode === 'dark' && <Moon className="w-4 h-4 md:w-5 md:h-5" />}
-                {mode === 'colored' && <Palette className="w-4 h-4 md:w-5 md:h-5" />}
-                <span className="hidden md:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-[10px] font-black uppercase tracking-widest rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  {mode}
-                </span>
-                {mode === 'colored' && showTooltip && (
-                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-12 px-2 py-1 bg-black text-white text-[10px] font-black uppercase tracking-widest rounded opacity-100 transition-opacity pointer-events-none">
-                    double click to customize
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </MotionDiv>
-      </AnimatePresence>
+      <FloatingThemeSwitcher
+        themeMode={themeMode}
+        setThemeMode={setThemeMode}
+        onColorPaletteOpen={() => setIsColorPaletteOpen(true)}
+      />
 
       <AnimatePresence>
         {isColorPaletteOpen && (

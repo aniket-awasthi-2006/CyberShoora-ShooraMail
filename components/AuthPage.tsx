@@ -61,17 +61,21 @@ const AuthPage: React.FC<AuthPageProps> = ({ onNavigate, themeMode, customTextCo
 
       else {
         const data = await response.json();
-        const mails = data.messages || data.inboxMails || (Array.isArray(data) ? data : []);
-        setInboxMails(mails as any);
-        // 2. Store the email for UI display
-        localStorage.setItem('user_email', formData.email.trim().toLowerCase());
-        localStorage.setItem('password', formData.password);
+        const userName = data.userName || 'ShooraMail User';
+        const email = formData.email.trim().toLowerCase();
 
-        // Redirect user
+        // Persist user session info
+        localStorage.setItem('user_email', email);
+        localStorage.setItem('password', formData.password);
+        localStorage.setItem('userData', JSON.stringify({
+          userName,
+          email
+        }));
+
+        // Redirect user (emails will be fetched on dashboard load)
         onNavigate('/dashboard', {
-          userName: data.userName || 'ShooraMail User',
-          email: formData.email,
-          inboxMails: mails
+          userName,
+          email
         });
       }
     } catch (err: any) {
@@ -97,20 +101,26 @@ const AuthPage: React.FC<AuthPageProps> = ({ onNavigate, themeMode, customTextCo
   };
 
   return (
-    <div className="min-h-[80vh] flex items-start justify-center px-6 pt-20">
+    <div className={`min-h-screen flex items-start justify-center px-6 pt-20 transition-all duration-700 ${
+      isLight ? 'bg-white' :
+      isDark ? 'bg-[#0B0C0D]' :
+      'bg-[#FFFFFF]'
+    }`}>
       <MotionDiv
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`max-w-md w-full rounded-[40px] shadow-2xl border p-10 flex flex-col gap-8 transition-all duration-700 ${isNormalMode ? 'bg-white border-gray-100' :
+        className={`max-w-md w-full rounded-[40px] shadow-2xl border p-10 flex flex-col gap-8 transition-all duration-700 ${
+          isLight ? 'bg-white border-gray-100' :
           isDark ? 'bg-[#131416] border-[#25282B]' :
-            'bg-black border-white'
-          }`}
+          'bg-white border-gray-100'
+        }`}
       >
         <div className="flex justify-center">
-          <div className={`w-12 h-12 p-2 rounded-2xl flex items-center justify-center transition-all duration-700 ${isColored ? `bg-[${customBgColor}]/10` :
+          <div className={`w-12 h-12 p-2 rounded-2xl flex items-center justify-center transition-all duration-700 ${
+            isColored ? 'bg-black/10' :
             isLight ? 'bg-black/5' :
-              'bg-white/10'
-            }`}>
+            'bg-white/10'
+          }`}>
             {isDark ? (
               <LogoWhite className="w-full h-full" />
             ) : (
@@ -120,22 +130,28 @@ const AuthPage: React.FC<AuthPageProps> = ({ onNavigate, themeMode, customTextCo
         </div>
 
         <div className="text-center flex flex-col gap-2">
-          <h2 className={`text-3xl font-black tracking-tighter transition-colors`} style={{ color: isColored ? customTextColor : isLight ? '#000000' : '#FFFFFF' }}
-          >
+          <h2 className={`text-3xl font-black tracking-tighter transition-colors duration-700 ${
+            isLight ? 'text-black' :
+            isDark ? 'text-white' :
+            ''
+          }`} style={isColored ? { color: customTextColor } : {}}>
             Welcome back.
           </h2>
-          <p className="opacity-60 text-sm font-medium">
+          <p className={`text-sm font-medium transition-colors duration-700 ${
+            isLight ? 'text-gray-500' :
+            isDark ? 'text-gray-400' :
+            'text-gray-500'
+          }`}>
             Enter your credentials to access ShooraMail
           </p>
         </div>
 
-
-
-
-
         {error && (
-          <div className={`p-3 rounded-xl flex items-start gap-3 text-sm ${isNormalMode ? 'bg-red-50 text-red-600' : 'bg-red-900/20 text-red-400'
-            }`}>
+          <div className={`p-3 rounded-xl flex items-start gap-3 text-sm transition-colors duration-700 ${
+            isLight ? 'bg-red-50 text-red-600' :
+            isDark ? 'bg-red-900/20 text-red-400' :
+            'bg-red-50 text-red-600'
+          }`}>
             <AlertCircle className="w-5 h-5 shrink-0" />
             <div className="flex flex-col gap-1">
               <span>{error}</span>
@@ -153,7 +169,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onNavigate, themeMode, customTextCo
               onChange={handleChange}
               type="email"
               placeholder="Email address"
-              className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border-2 border-transparent text-sm font-medium transition-all duration-500 outline-none ${isNormalMode ? 'bg-gray-50 focus:border-[#2D62ED] focus:bg-white' : 'bg-white/5 focus:border-white focus:bg-white/10 text-white'
+              className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border-2 border-transparent text-sm font-medium transition-all duration-500 outline-none ${isLight ? 'bg-gray-50 focus:border-[#2D62ED] focus:bg-white text-black' : isDark ? 'bg-white/5 focus:border-white focus:bg-white/10 text-white' : 'bg-gray-50 focus:border-[#2D62ED] focus:bg-white text-black'
                 }`}
             />
           </div>
@@ -166,7 +182,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onNavigate, themeMode, customTextCo
               onChange={handleChange}
               type="password"
               placeholder="Password"
-              className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border-2 border-transparent text-sm font-medium transition-all duration-500 outline-none ${isNormalMode ? 'bg-gray-50 focus:border-[#2D62ED] focus:bg-white' : 'bg-white/5 focus:border-white focus:bg-white/10 text-white'
+              className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border-2 border-transparent text-sm font-medium transition-all duration-500 outline-none ${isLight ? 'bg-gray-50 focus:border-[#2D62ED] focus:bg-white text-black' : isDark ? 'bg-white/5 focus:border-white focus:bg-white/10 text-white' : 'bg-gray-50 focus:border-[#2D62ED] focus:bg-white text-black'
                 }`}
             />
           </div>

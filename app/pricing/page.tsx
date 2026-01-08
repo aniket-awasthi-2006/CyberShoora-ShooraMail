@@ -1,19 +1,17 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Navbar from '../../components/Navbar'
 import PricingPage from '../../components/PricingPage'
+import FloatingThemeSwitcher from '../../components/FloatingThemeSwitcher'
 import { useRouter } from 'next/navigation'
-
-export type ThemeMode = 'light' | 'dark' | 'colored'
+import { useTheme } from '../../components/ThemeProvider'
 
 const MotionDiv = motion.div as any
 
 const PricingRoute: React.FC = () => {
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light')
-  const [customTextColor, setCustomTextColor] = useState('#0e4c6d')
-  const [customBgColor, setCustomBgColor] = useState('#FFFFFF')
+  const { themeMode, setThemeMode, customTextColor, customBgColor } = useTheme()
   const router = useRouter()
 
   const themeStyles = {
@@ -58,7 +56,10 @@ const PricingRoute: React.FC = () => {
   }
 
   return (
-    <div className={`relative min-h-screen transition-all duration-700 ease-in-out ${currentTheme.bg} ${currentTheme.text}`}>
+    <div 
+      className={`relative min-h-screen transition-all duration-700 ease-in-out ${themeMode === 'light' ? 'bg-white text-black' : themeMode === 'dark' ? 'bg-[#0B0C0D] text-[#ECEEF2]' : ''}`}
+      style={themeMode === 'colored' ? { backgroundColor: customBgColor, color: customTextColor } : {}}
+    >
       <motion.div
         key="navbar"
         initial={{ opacity: 0, y: -20 }}
@@ -88,6 +89,11 @@ const PricingRoute: React.FC = () => {
           <PricingPage onNavigate={handleNavigate} themeMode={themeMode} customTextColor={customTextColor} customBgColor={customBgColor} />
         </MotionDiv>
       </main>
+      
+      <FloatingThemeSwitcher 
+        themeMode={themeMode}
+        setThemeMode={setThemeMode}
+      />
     </div>
   )
 }

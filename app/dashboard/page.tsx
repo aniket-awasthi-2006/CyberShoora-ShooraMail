@@ -4,23 +4,19 @@ import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Dashboard from '../../components/Dashboard'
 import { useRouter } from 'next/navigation'
+import { useTheme } from '../../components/ThemeProvider'
 
-export type ThemeMode = 'light' | 'dark' | 'colored'
-
-interface UserData {
-  firstName: string
-  lastName: string
+type DashboardUser = {
+  userName: string
   email: string
-  password?: string
+  inboxMails?: any[]
 }
 
 const MotionDiv = motion.div as any
 
 const DashboardPage: React.FC = () => {
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light')
-  const [customTextColor, setCustomTextColor] = useState('#0e4c6d')
-  const [customBgColor, setCustomBgColor] = useState('#FFFFFF')
-  const [currentUser, setCurrentUser] = useState<UserData | null>(null)
+  const { themeMode, setThemeMode, customTextColor, customBgColor, setCustomTextColor, setCustomBgColor } = useTheme()
+  const [currentUser, setCurrentUser] = useState<DashboardUser | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -28,7 +24,11 @@ const DashboardPage: React.FC = () => {
     if (userDataString) {
       try {
         const userData = JSON.parse(userDataString)
-        setCurrentUser(userData)
+        setCurrentUser({
+          userName: userData.userName || 'ShooraMail User',
+          email: userData.email,
+          inboxMails: userData.inboxMails || []
+        })
       } catch (e) {
         console.error("Failed to parse user data from localStorage", e)
         localStorage.removeItem('userData')
@@ -72,6 +72,8 @@ const DashboardPage: React.FC = () => {
         setThemeMode={setThemeMode}
         customTextColor={customTextColor}
         customBgColor={customBgColor}
+        setCustomTextColor={setCustomTextColor}
+        setCustomBgColor={setCustomBgColor}
       />
     </MotionDiv>
   )
