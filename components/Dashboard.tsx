@@ -190,7 +190,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
   const [isLogoutWarningOpen, setIsLogoutWarningOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [toasts, setToasts] = useState<{ id: string, message: string, type: 'success' | 'error' }[]>([]);
-  const [composeData, setComposeData] = useState<{ to: string; subject: string; body: string; html?: string; id?: string }>({ to: '', subject: '', body: '' });
+  const [composeData, setComposeData] = useState<{ to: string; subject: string; body: string; html?: string; id?: string; attachments?: File[] }>({ to: '', subject: '', body: '', attachments: [] });
   const [isReloading, setIsReloading] = useState(false);
   const [settings, setSettings] = useState({ notifications: true, autoReply: false });
   const [isColorPaletteOpen, setIsColorPaletteOpen] = useState(false);
@@ -543,13 +543,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
       // Always send HTML content - if html is provided use it, otherwise convert body to HTML
       const htmlContent = composeData.html || composeData.body;
 
-      await api.post('/api/send-mail', {
-        to: composeData.to,
-        subject: composeData.subject,
-        body: composeData.body,
-        html: htmlContent,
-        email: userData.email,
-        password: localStorage.getItem('password')
+      // Create FormData to handle attachments
+      const formData = new FormData();
+      formData.append('to', composeData.to);
+      formData.append('subject', composeData.subject);
+      formData.append('body', composeData.body);
+      formData.append('html', htmlContent);
+      formData.append('email', userData.email);
+      formData.append('password', localStorage.getItem('password') || '');
+
+      // Add attachments if any
+      if (composeData.attachments && composeData.attachments.length > 0) {
+        composeData.attachments.forEach((file, index) => {
+          formData.append('attachments', file);
+        });
+      }
+
+      await api.post('/api/send-mail', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
       showToast('Email sent successfully', 'success');
 
@@ -566,14 +579,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
         folder: 'sent',
         avatar: `https://i.pravatar.cc/100?u=${userData.email}`,
         unread: false,
-        isHtml: true
+        isHtml: true,
       };
       setMessages(prev => [sentMsg, ...prev]);
       setIsComposeMode(false);
-      setComposeData({ to: '', subject: '', body: '', html: '' });
+      setComposeData({ to: '', subject: '', body: '', html: '', attachments: [] });
       setIsHtmlMode(false);
     } catch (e) {
       showToast('Failed to send email', 'error');
+    } finally {
+      setIsReloading(false);
     }
   };
 
@@ -911,7 +926,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                 </button>
               </div>
               <h2 className="text-2xl md:text-3xl font-black tracking-tighter transition-colors duration-700 capitalize" style={{ color: colors.textMain }}>{activeFolder}</h2>
-              <button onClick={() => { setSelectedMailId(null); setIsComposeMode(true); }} className={`p-2 rounded-full transition-all duration-700 ${themeMode === 'colored' ? 'bg-[#2D62ED]/10 text-[#2D62ED]' : 'hover:bg-black/5 text-current'}`} style={{ color: colors.textMain }}>
+              <button onClick={() => { setSelectedMailId(null); setIsComposeMode(true); setComposeData({ to: '', subject: '', body: '', html: '' }); }} className={`p-2 rounded-full transition-all duration-700 ${themeMode === 'colored' ? 'bg-[#2D62ED]/10 text-[#2D62ED]' : 'hover:bg-black/5 text-current'}`} style={{ color: colors.textMain }}>
                 <Plus className="w-6 h-6" />
               </button>
             </div>
@@ -1013,8 +1028,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                   </button>
                 </div>
                 <div className="flex flex-col gap-6">
-                  <input value={composeData.to} onChange={e => setComposeData({ ...composeData, to: e.target.value })} placeholder="To" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: '#000000' }} />
-                  <input value={composeData.subject} onChange={e => setComposeData({ ...composeData, subject: e.target.value })} placeholder="Subject" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: '#000000' }} />
+                  <input value={composeData.to} onChange={e => setComposeData({ ...composeData, to: e.target.value })} placeholder="To" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: colors.textMain }} />
+                  <input value={composeData.subject} onChange={e => setComposeData({ ...composeData, subject: e.target.value })} placeholder="Subject" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: colors.textMain }} />
 
                   {/* HTML/Text Mode Toggle */}
                   <div className="flex items-center justify-between p-2 rounded-xl border" style={{ borderColor: colors.border, backgroundColor: colors.inputBg }}>
@@ -1044,7 +1059,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                       onChange={e => setComposeData({ ...composeData, html: e.target.value })}
                       placeholder="Compose HTML Message...."
                       className="w-full p-4 rounded-xl border bg-transparent outline-none resize-none transition-colors"
-                      style={{ borderColor: colors.border, color: '#000000', height: '500px' }}
+                      style={{ borderColor: colors.border, color: colors.textMain, height: '500px' }}
                     />
                   ) : (
                     <div className="rounded-xl border overflow-hidden transition-colors" style={{ borderColor: colors.border }}>
@@ -1059,6 +1074,101 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                       />
                     </div>
                   )}
+
+                  {/* Attachments Section */}
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold" style={{ color: colors.textMain }}>Attachments</span>
+                      <label className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all hover:scale-105 cursor-pointer" style={{ backgroundColor: colors.itemActiveBg, color: colors.primary }}>
+                        <Paperclip className="w-4 h-4 inline mr-1" />
+                        Add Files
+                        <input
+                          type="file"
+                          multiple
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            setComposeData(prev => ({
+                              ...prev,
+                              attachments: [...(prev.attachments || []), ...files]
+                            }));
+                            e.target.value = ''; // Reset input
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {/* Drag and Drop Area */}
+                    <div
+                      className="border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 hover:border-opacity-60 cursor-pointer"
+                      style={{
+                        borderColor: colors.border,
+                        backgroundColor: colors.inputBg
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDragEnter={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const files = Array.from(e.dataTransfer.files);
+                        setComposeData(prev => ({
+                          ...prev,
+                          attachments: [...(prev.attachments || []), ...files]
+                        }));
+                      }}
+                    >
+                      <div className="flex flex-col items-center gap-3">
+                        <Paperclip className="w-8 h-8 opacity-40" style={{ color: colors.primary }} />
+                        <div>
+                          <p className="text-sm font-bold" style={{ color: colors.textMain }}>
+                            Drag and drop files here
+                          </p>
+                          <p className="text-xs opacity-60" style={{ color: colors.textMuted }}>
+                            or click "Add Files" above
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Display Selected Attachments */}
+                    {composeData.attachments && composeData.attachments.length > 0 && (
+                      <div className="space-y-2">
+                        {composeData.attachments.map((file, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 rounded-lg border" style={{ borderColor: colors.border, backgroundColor: colors.inputBg }}>
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: colors.itemActiveBg }}>
+                                <Paperclip className="w-4 h-4" style={{ color: colors.primary }} />
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold truncate max-w-xs" style={{ color: colors.textMain }}>{file.name}</p>
+                                <p className="text-xs opacity-60" style={{ color: colors.textMuted }}>
+                                  {(file.size / 1024).toFixed(1)} KB
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setComposeData(prev => ({
+                                  ...prev,
+                                  attachments: prev.attachments?.filter((_, i) => i !== index) || []
+                                }));
+                              }}
+                              className="p-1 rounded-lg hover:bg-red-500/10 text-red-500 transition-colors"
+                              title="Remove attachment"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center justify-end">
                     <div className="flex gap-4">
                       <button onClick={handleSaveDraft} disabled={isReloading} className="px-6 py-2.5 rounded-xl font-bold shadow-lg hover:scale-105 transition-all flex items-center gap-2" style={{ backgroundColor: colors.itemActiveBg, color: colors.primary }}>

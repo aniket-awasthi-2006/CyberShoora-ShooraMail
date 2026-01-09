@@ -40,6 +40,41 @@ const parseEmail = async (message, source, folder = 'inbox') => {
     const toemailName = toemailMatch ? toemailMatch[1] : (mail.to?.text.split('@')[0].trim() || 'Unknown');
     const toemailEmail = toemailMatch ? toemailMatch[1] : (mail.to?.text || '');
 
+    // Categorize email based on sender domain
+    const categorizeEmail = (email) => {
+        if (!email) return 'personal';
+
+        const domain = email.toLowerCase().split('@')[1];
+        if (!domain) return 'personal';
+
+        // Work domains (common business domains)
+        const workDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'aol.com', 'protonmail.com', 'icloud.com', 'me.com', 'mac.com'];
+        // Promotional domains (common marketing/sender domains)
+        const promoDomains = ['newsletter', 'mailchimp', 'constantcontact', 'sendgrid', 'mailgun', 'amazon', 'ebay', 'facebook', 'twitter', 'linkedin', 'instagram', 'youtube', 'netflix', 'spotify', 'uber', 'lyft', 'airbnb', 'booking', 'expedia', 'tripadvisor', 'paypal', 'stripe', 'shopify', 'woocommerce', 'wordpress', 'blogger', 'medium', 'substack', 'patreon', 'kickstarter', 'indiegogo', 'gofundme', 'eventbrite', 'meetup', 'slack', 'discord', 'zoom', 'teams', 'webex', 'gotomeeting', 'cisco', 'juniper', 'aruba', 'huawei', 'dell', 'hp', 'lenovo', 'apple', 'microsoft', 'google', 'amazon', 'facebook', 'twitter', 'linkedin', 'instagram', 'youtube', 'netflix', 'spotify', 'uber', 'lyft', 'airbnb', 'booking', 'expedia', 'tripadvisor', 'paypal', 'stripe', 'shopify', 'woocommerce', 'wordpress', 'blogger', 'medium', 'substack', 'patreon', 'kickstarter', 'indiegogo', 'gofundme', 'eventbrite', 'meetup', 'slack', 'discord', 'zoom', 'teams', 'webex', 'gotomeeting'];
+
+        // Check if domain contains promotional keywords
+        const hasPromoKeyword = promoDomains.some(keyword => domain.includes(keyword));
+
+        // Check if it's a work domain (common personal email providers)
+        const isWorkDomain = workDomains.some(workDomain => domain === workDomain);
+
+        if (hasPromoKeyword) {
+            return 'promotions';
+        } else if (isWorkDomain) {
+            return 'work';
+        } else {
+            // For other domains, check if they look like business domains
+            // Business domains typically have 2-3 parts and no common personal suffixes
+            const parts = domain.split('.');
+            if (parts.length >= 2 && parts.length <= 3 && !domain.includes('gmail') && !domain.includes('yahoo') && !domain.includes('hotmail')) {
+                return 'work';
+            }
+            return 'personal';
+        }
+    };
+
+    const category = categorizeEmail(senderEmail);
+
     // Process attachments without saving to disk - create direct download links
     const processedAttachments = [];
     if (mail.attachments && mail.attachments.length > 0) {
@@ -80,8 +115,8 @@ const parseEmail = async (message, source, folder = 'inbox') => {
         date: mail.date || message.internalDate,
         unread: !message.flags.has('\\Seen'),
         flagged: message.flags.has('\\Flagged'),
-        categoryColor: '#2D62ED',
-        category: 'personal',
+        categoryColor: category === 'work' ? '#34A853' : category === 'personal' ? '#FFB800' : '#2D62ED',
+        category: category,
         attachments: processedAttachments,
         avatar: '',
         folder: folder,

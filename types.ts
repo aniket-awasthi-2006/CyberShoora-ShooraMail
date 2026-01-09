@@ -2,8 +2,7 @@ export type View = 'landing' | 'pricing' | 'signin' | 'signup' | 'dashboard' | '
 export type ThemeMode = 'light' | 'dark' | 'colored';
 
 export interface UserData {
-  firstName: string;
-  lastName: string;
+  userName: string;
   email: string;
-  password?: string;
+  inboxMails?: any[];
 }

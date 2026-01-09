@@ -2,6 +2,9 @@ import express from 'express';
 import mailRoutes from './routes/mailRoutes.js';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
 

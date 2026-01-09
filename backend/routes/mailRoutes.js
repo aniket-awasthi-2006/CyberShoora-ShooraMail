@@ -1,8 +1,71 @@
 import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { fetchInbox, fetchEmailsByFolder, markAsRead, deleteEmail, moveEmail, toggleStarred, toggleImportant, saveDraft, saveSentEmail, downloadAttachment } from '../services/imapService.js';
 import { sendEmail, replyEmail, forwardEmail } from '../services/smtpService.js';
 
 const router = express.Router();
+
+// Utility function to clean up uploaded files
+const cleanupUploadedFiles = (attachments) => {
+    if (attachments && Array.isArray(attachments)) {
+        attachments.forEach(attachment => {
+            if (attachment.path && fs.existsSync(attachment.path)) {
+                try {
+                    fs.unlinkSync(attachment.path);
+                    console.log(`Cleaned up file: ${attachment.path}`);
+                } catch (err) {
+                    console.error(`Failed to cleanup file ${attachment.path}:`, err);
+                }
+            }
+        });
+    }
+};
+
+// Configure multer for file uploads
+// Ensure uploads directory exists relative to project root
+const uploadsDir = path.join(process.cwd(), 'backend/uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadsDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        // Allow common file types
+        const allowedExtensions = ['.jpeg', '.jpg', '.png', '.gif', '.pdf', '.doc', '.docx', '.txt', '.zip', '.rar'];
+        const allowedMimeTypes = [
+            'image/jpeg', 'image/jpg', 'image/png', 'image/gif',
+            'application/pdf',
+            'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain',
+            'application/zip', 'application/x-rar-compressed'
+        ];
+
+        const extname = path.extname(file.originalname).toLowerCase();
+        const mimetype = file.mimetype.toLowerCase();
+
+        if (allowedExtensions.includes(extname) && allowedMimeTypes.includes(mimetype)) {
+            return cb(null, true);
+        } else {
+            cb(new Error(`Invalid file type. Extension: ${extname}, MIME: ${mimetype}`));
+        }
+    }
+});
 
 // Login and Fetch Initial Emails
 router.post('/login-fetch', async (req, res) => {
@@ -90,83 +153,102 @@ router.post('/folder-fetch', async (req, res) => {
     }
 });
 
+// Send Email with error handling middleware
+const handleMulterError = (error, req, res, next) => {
+    // Clean up any uploaded files on error
+    const attachments = req.files?.attachments || [];
+    cleanupUploadedFiles(attachments);
+
+    if (error instanceof multer.MulterError) {
+        if (error.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ success: false, message: "File size exceeds 10MB limit" });
+        }
+        if (error.code === 'LIMIT_FILE_COUNT') {
+            return res.status(400).json({ success: false, message: "Maximum 10 attachments allowed" });
+        }
+        if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+            return res.status(400).json({ success: false, message: "Unexpected file field" });
+        }
+        return res.status(400).json({ success: false, message: `Upload error: ${error.message}` });
+    }
+
+    // Handle custom file filter errors
+    if (error.message && error.message.includes('Invalid file type')) {
+        return res.status(400).json({ success: false, message: error.message });
+    }
+
+    next(error);
+};
+
 // Send Email
-router.post('/send-mail', async (req, res) => {
-    const { email, password, to, subject, body, html, attachments } = req.body;
+router.post('/send-mail', upload.fields([{ name: 'attachments', maxCount: 10 }]), handleMulterError, async (req, res) => {
+    const { email, password, to, subject, body, html } = req.body;
+    const attachments = req.files?.attachments || [];
+    let emailSent = false;
+
     try {
+        // Validate required fields
+        if (!to || !subject || (!body && !html)) {
+            cleanupUploadedFiles(attachments);
+            return res.status(400).json({ success: false, message: "Missing required fields: to, subject, and body/html" });
+        }
+
         // Always send HTML content - if html is provided use it, otherwise convert body to HTML
         const htmlContent = html || `<div>${body}</div>`;
 
         // Process attachments for nodemailer
         let processedAttachments = [];
         if (attachments && Array.isArray(attachments)) {
-            processedAttachments = attachments.map(attachment => {
-                if (attachment.path) {
-                    // File was uploaded to server
-                    return {
-                        path: attachment.path,
-                        filename: attachment.filename,
-                        contentType: attachment.mimetype
-                    };
-                } else if (attachment.content) {
-                    // Base64 encoded content
-                    return {
-                        content: attachment.content,
-                        filename: attachment.filename,
-                        contentType: attachment.mimetype,
-                        encoding: 'base64'
-                    };
-                } else if (attachment.url) {
-                    // URL-based attachment
-                    return {
-                        path: attachment.url.startsWith('http') ? attachment.url : path.join(process.cwd(), attachment.url),
-                        filename: attachment.filename,
-                        contentType: attachment.mimetype
-                    };
-                }
-                return {
-                    path: attachment.path || attachment.url,
-                    filename: attachment.filename,
-                    contentType: attachment.mimetype
-                };
-            });
+            processedAttachments = attachments.map(attachment => ({
+                path: attachment.path,
+                filename: attachment.originalname,
+                contentType: attachment.mimetype
+            }));
         }
 
         await sendEmail(
             { user: email, pass: password },
             { from: email, to, subject, html: htmlContent, text: body, attachments: processedAttachments }
         );
+        emailSent = true;
         res.status(200).json({ success: true, message: "Email Sent Successfully" });
+
+        // Schedule cleanup after successful send
+        setTimeout(() => cleanupUploadedFiles(attachments), 1000); // Delay cleanup to ensure email is sent
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error('Email sending error:', error);
+        cleanupUploadedFiles(attachments);
+        res.status(500).json({ success: false, message: error.message || "Failed to send email" });
     } finally {
-        try {
-            const htmlContent = html || `<div>${body}</div>`;
+        // Only try to save sent email if it was actually sent
+        if (emailSent) {
+            try {
+                const htmlContent = html || `<div>${body}</div>`;
 
-            // Process attachments for saving sent email
-            let processedAttachments = [];
-            if (attachments && Array.isArray(attachments)) {
-                processedAttachments = attachments.map(attachment => ({
-                    filename: attachment.filename,
-                    size: attachment.size,
-                    mimetype: attachment.mimetype,
-                    url: attachment.url
-                }));
+                // Process attachments for saving sent email
+                let processedAttachments = [];
+                if (attachments && Array.isArray(attachments)) {
+                    processedAttachments = attachments.map(attachment => ({
+                        filename: attachment.filename,
+                        size: attachment.size,
+                        mimetype: attachment.mimetype,
+                        url: attachment.url
+                    }));
+                }
+
+                await saveSentEmail(
+                    email, // Assuming authDetails has the email/user
+                    password, // Assuming authDetails has the password
+                    { from: email, to, subject, html: htmlContent, text: body, attachments: processedAttachments }
+                );
+            } catch (err) {
+                // We log the error but don't throw it, because the email WAS actually sent to the recipient.
+                // We don't want to tell the frontend "Failed" just because the copy wasn't saved.
+                console.error('Error saving sent email copy:', err);
             }
-
-            await saveSentEmail(
-                email, // Assuming authDetails has the email/user
-                password, // Assuming authDetails has the password
-                { from: email, to, subject, html: htmlContent, text: body, attachments: processedAttachments }
-            );
-        } catch (err) {
-            // We log the error but don't throw it, because the email WAS actually sent to the recipient.
-            // We don't want to tell the frontend "Failed" just because the copy wasn't saved.
-            console.error('Error saving sent email copy:', err);
         }
     }
-}
-);
+});
 
 // Reply to Email
 router.post('/reply-mail', async (req, res) => {

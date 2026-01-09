@@ -1,0 +1,18 @@
+{
+    "sourceFile": "types.ts",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1767970904292,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1767970904292,
+            "name": "Commit-0",
+            "content": "export type View = 'landing' | 'pricing' | 'signin' | 'signup' | 'dashboard' | 'admin';\r\nexport type ThemeMode = 'light' | 'dark' | 'colored';\r\n\r\nexport interface UserData {\r\n  userName: string;\r\n  email: string;\r\n  inboxMails?: any[];\r\n}\r\n"
+        }
+    ]
+}

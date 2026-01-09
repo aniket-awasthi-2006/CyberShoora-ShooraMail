@@ -1,0 +1,26 @@
+{
+    "sourceFile": "TODO.md",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 2,
+            "patches": [
+                {
+                    "date": 1767974407444,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1767975294835,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -8,9 +8,9 @@\n - [x] Update attachment processing for saving sent emails\r\n - [x] Create uploads directory for file storage\r\n \r\n ## Remaining Tasks\r\n-- [ ] Test the attachment upload functionality\r\n+- [x] Test the attachment upload functionality\r\n - [ ] Verify frontend-backend integration for attachments\r\n - [ ] Add error handling for file upload failures\r\n - [ ] Implement file cleanup after email sending (optional)\r\n \r\n"
+                },
+                {
+                    "date": 1767975431370,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -9,9 +9,9 @@\n - [x] Create uploads directory for file storage\r\n \r\n ## Remaining Tasks\r\n - [x] Test the attachment upload functionality\r\n-- [ ] Verify frontend-backend integration for attachments\r\n+- [x] Verify frontend-backend integration for attachments\r\n - [ ] Add error handling for file upload failures\r\n - [ ] Implement file cleanup after email sending (optional)\r\n \r\n ## Notes\r\n"
+                }
+            ],
+            "date": 1767974407444,
+            "name": "Commit-0",
+            "content": "# Attachment Functionality Implementation\r\n\r\n## Completed Tasks\r\n- [x] Configure multer middleware in server.js for file uploads\r\n- [x] Set up multer storage and file filtering in mailRoutes.js\r\n- [x] Update /send-mail route to handle multipart/form-data with attachments\r\n- [x] Process uploaded files for nodemailer attachment format\r\n- [x] Update attachment processing for saving sent emails\r\n- [x] Create uploads directory for file storage\r\n\r\n## Remaining Tasks\r\n- [ ] Test the attachment upload functionality\r\n- [ ] Verify frontend-backend integration for attachments\r\n- [ ] Add error handling for file upload failures\r\n- [ ] Implement file cleanup after email sending (optional)\r\n\r\n## Notes\r\n- Frontend changes have been applied to Dashboard.tsx (button and drag-and-drop functionality)\r\n- Backend now supports up to 10 attachments per email with 10MB size limit\r\n- Supported file types: jpeg, jpg, png, gif, pdf, doc, docx, txt, zip, rar\r\n- Files are stored temporarily in backend/uploads/ directory\r\n"
+        }
+    ]
+}

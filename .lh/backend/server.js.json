@@ -1,0 +1,18 @@
+{
+    "sourceFile": "backend/server.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1767974317183,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1767974317183,
+            "name": "Commit-0",
+            "content": "import express from 'express';\r\nimport mailRoutes from './routes/mailRoutes.js';\r\nimport cors from 'cors';\r\nimport dotenv from 'dotenv';\r\nimport multer from 'multer';\r\nimport path from 'path';\r\nimport { fileURLToPath } from 'url';\r\n\r\ndotenv.config();\r\n\r\nconst app = express();\r\nconst PORT = process.env.PORT || 5000;\r\n\r\n// Middleware\r\napp.use(cors({\r\n    origin: process.env.FRONTEND_URL || ['http://localhost:3000', 'http://172.16.0.2:3000'],\r\n    methods: ['GET', 'POST', 'PUT', 'DELETE'],\r\n    allowedHeaders: ['Content-Type', 'Authorization'],\r\n    credentials: true\r\n}));\r\n\r\n// Body parser middleware - place BEFORE routes that need JSON parsing\r\napp.use(express.json({ limit: '50mb' }));\r\napp.use(express.urlencoded({ extended: true, limit: '50mb' }));\r\n\r\n// Routes\r\napp.use('/api', mailRoutes);\r\n\r\n// Health check endpoint\r\napp.get('/health', (req, res) => {\r\n    res.status(200).json({ status: 'OK', message: 'Server is running' });\r\n});\r\n\r\n// Error handling middleware\r\napp.use((err, req, res, next) => {\r\n    console.error('Error:', err);\r\n    res.status(500).json({ success: false, message: 'Internal server error' });\r\n});\r\n\r\napp.listen(PORT, () => {\r\n    console.log(`Webmail Backend running on http://localhost:${PORT}`);\r\n});\r\n\r\n// Handle unhandled promise rejections\r\nprocess.on('unhandledRejection', (err) => {\r\n    console.error('Unhandled Rejection:', err);\r\n});\r\n\r\n// Handle uncaught exceptions\r\nprocess.on('uncaughtException', (err) => {\r\n    console.error('Uncaught Exception:', err);\r\n    process.exit(1);\r\n});\r\n"
+        }
+    ]
+}
