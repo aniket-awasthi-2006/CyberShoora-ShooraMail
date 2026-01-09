@@ -93,11 +93,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onNavigate, themeMode, customTextCo
         setError(msg);
         setError(msg || "Network error. Please check your connection.");
       }
-
-    } finally {
       setIsLoading(false);
-    };
-
+    } 
   };
 
   return (

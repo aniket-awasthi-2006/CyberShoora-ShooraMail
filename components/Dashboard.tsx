@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import {
   Menu, Search, Star, Send, FileText, Trash2, Mail, MoreVertical, Reply, Forward, Mails, Pin,
   Plus, Circle, LogOut, Sun, Moon, Palette, ArrowLeft, X, Check, Loader2,
-  Settings, Copy , Shield, Inbox, RefreshCw, AlertCircle, RotateCcw, Eye, Paperclip
+  Settings, Copy, Shield, Inbox, RefreshCw, AlertCircle, RotateCcw, Eye, Paperclip
 } from 'lucide-react';
 import 'react-quill/dist/quill.snow.css';
 import { ThemeMode } from '../types';
@@ -23,7 +23,7 @@ const quillModules = {
   toolbar: [
     [{ 'header': [1, 2, 3, false] }],
     ['bold', 'italic', 'underline', 'strike'],
-    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
     [{ 'color': [] }, { 'background': [] }],
     ['link'],
     ['clean']
@@ -362,22 +362,22 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
       if (activeFolder === 'all') {
         // Fetch inbox emails
         const inboxResponse = await api.post('/api/inbox-fetch', { email: userData.email, password: password || '' });
-        
+
         // Fetch sent emails
-        const sentResponse = await api.post('/api/folder-fetch', { 
-          email: userData.email, 
-          password: password || '', 
-          folder: 'Sent' 
+        const sentResponse = await api.post('/api/folder-fetch', {
+          email: userData.email,
+          password: password || '',
+          folder: 'Sent'
         });
 
         let allMails: any[] = [];
-        
+
         // Process inbox emails
         if (inboxResponse.data.success) {
           const inboxMails = Array.isArray(inboxResponse.data.data.mails) ? inboxResponse.data.data.mails : [];
           allMails = allMails.concat(inboxMails.map((mail: any) => ({ ...mail, folder: 'inbox' })));
         }
-        
+
         // Process sent emails
         if (sentResponse.data.success) {
           const sentMails = Array.isArray(sentResponse.data.data.mails) ? sentResponse.data.data.mails : [];
@@ -504,13 +504,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     try {
       // Always send HTML content - if html is provided use it, otherwise convert body to HTML
       const htmlContent = composeData.html || composeData.body;
-      
-      await api.post('/api/send-mail', { 
+
+      await api.post('/api/send-mail', {
         to: composeData.to,
         subject: composeData.subject,
         body: composeData.body,
         html: htmlContent,
-        email: userData.email, 
+        email: userData.email,
         password: localStorage.getItem('password')
       });
       showToast('Email sent successfully', 'success');
@@ -528,7 +528,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
         folder: 'sent',
         avatar: `https://i.pravatar.cc/100?u=${userData.email}`,
         unread: false,
-        isHtml: true 
+        isHtml: true
       };
       setMessages(prev => [sentMsg, ...prev]);
       setIsComposeMode(false);
@@ -691,22 +691,53 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     setIsJunkWarningOpen(true);
   };
 
-  const confirmMarkJunk = () => {
+
+  const handleReply = () => {
     if (!selectedMail) return;
-    setMessages(prev => prev.map(m => m.id === selectedMail.id ? { ...m, folder: 'trash' } : m));
-    setSelectedMailId(null);
-    setIsJunkWarningOpen(false);
-    showToast('Moved to junk', 'success');
-    const sourceFolder = selectedMail.folder === 'sent' ? 'Sent' : selectedMail.folder === 'inbox' ? 'INBOX' : selectedMail.folder === 'drafts' ? 'Drafts' : 'INBOX';
-    api.post('/api/move-mail', {
-      messageId: selectedMail.id,
-      email: userData.email,
-      password: localStorage.getItem('password'),
-      destinationFolder: 'Trash',
-      sourceFolder
-    }).catch(() => {
-      showToast('Failed to move to junk', 'error');
+
+    const replySubject = selectedMail.subject.startsWith('Re: ') ? selectedMail.subject : `Re: ${selectedMail.subject}`;
+    const replyTo = activeFolder === 'sent' ? selectedMail.toEmail : selectedMail.senderEmail;
+
+    const originalMessage = `
+<div style="border-left: 2px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;">
+  <p><em>On ${selectedMail.date}, ${activeFolder === 'sent' ? selectedMail.to : selectedMail.sender} wrote:</em></p>
+  <div>${selectedMail.body}</div>
+</div>`;
+
+    setComposeData({
+      to: replyTo,
+      subject: replySubject,
+      body: '',
+      html: originalMessage
     });
+    setIsComposeMode(true);
+    setIsHtmlMode(true);
+  };
+
+  const handleForward = () => {
+    if (!selectedMail) return;
+    
+    const forwardSubject = selectedMail.subject.startsWith('Fwd: ') ? selectedMail.subject : `Fwd: ${selectedMail.subject}`;
+    
+    const originalMessage = `
+<div style="border-left: 2px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;">
+  <p><em>--- Forwarded message ---</em></p>
+  <p><strong>From:</strong> ${selectedMail.sender} &lt;${selectedMail.senderEmail}&gt;</p>
+  <p><strong>Date:</strong> ${selectedMail.date}</p>
+  <p><strong>Subject:</strong> ${selectedMail.subject}</p>
+  ${activeFolder === 'sent' ? `<p><strong>To:</strong> ${selectedMail.to} &lt;${selectedMail.toEmail}&gt;</p>` : ''}
+  <br>
+  <div>${selectedMail.body}</div>
+</div>`;
+    
+    setComposeData({
+      to: '',
+      subject: forwardSubject,
+      body: '',
+      html: originalMessage
+    });
+    setIsComposeMode(true);
+    setIsHtmlMode(true);
   };
 
   return (
@@ -764,7 +795,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
               <SidebarItem icon={Pin} label="Important" count={messages.filter(m => m.important).length || undefined} active={activeFolder === 'important'} onClick={() => setActiveFolder('important')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
               <SidebarItem icon={Send} label="Sent" count={messages.filter(m => m.folder === 'sent').length || undefined} active={activeFolder === 'sent'} onClick={() => setActiveFolder('sent')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
               <SidebarItem icon={FileText} label="Drafts" count={messages.filter(m => m.folder === 'drafts').length || undefined} active={activeFolder === 'drafts'} onClick={() => setActiveFolder('drafts')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
-              <SidebarItem icon={Mails} label="All Mails" count={activeFolder === 'all' && (messages.filter(m => m.folder === 'inbox').length + messages.filter(m => m.folder === 'sent').length) > 0 ? (messages.filter(m => m.folder === 'inbox').length + messages.filter(m => m.folder === 'sent').length) : null } active={activeFolder === 'all'} onClick={() => setActiveFolder('all')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
+              <SidebarItem icon={Mails} label="All Mails" count={activeFolder === 'all' && (messages.filter(m => m.folder === 'inbox').length + messages.filter(m => m.folder === 'sent').length) > 0 ? (messages.filter(m => m.folder === 'inbox').length + messages.filter(m => m.folder === 'sent').length) : null} active={activeFolder === 'all'} onClick={() => setActiveFolder('all')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
               <SidebarItem icon={Settings} label="Settings" onClick={() => setIsSettingsOpen(true)} isCollapsed={isCollapsed && !isMobile} colors={colors} />
               <SidebarItem icon={Trash2} label="Trash" count={messages.filter(m => m.folder === 'trash').length || undefined} active={activeFolder === 'trash'} onClick={() => setActiveFolder('trash')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
 
@@ -923,7 +954,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                 <div className="flex flex-col gap-6">
                   <input value={composeData.to} onChange={e => setComposeData({ ...composeData, to: e.target.value })} placeholder="To" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: '#000000' }} />
                   <input value={composeData.subject} onChange={e => setComposeData({ ...composeData, subject: e.target.value })} placeholder="Subject" className="w-full p-4 rounded-xl border bg-transparent outline-none transition-colors" style={{ borderColor: colors.border, color: '#000000' }} />
-                  
+
                   {/* HTML/Text Mode Toggle */}
                   <div className="flex items-center justify-between p-2 rounded-xl border" style={{ borderColor: colors.border, backgroundColor: colors.inputBg }}>
                     <span className="text-sm font-bold" style={{ color: colors.textMain }}>Compose Mode:</span>
@@ -947,11 +978,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
 
                   {/* Message Body */}
                   {isHtmlMode ? (
-                    <textarea 
-                      value={composeData.html || ''} 
-                      onChange={e => setComposeData({ ...composeData, html: e.target.value })} 
-                      placeholder="Compose HTML Message...." 
-                      className="w-full p-4 rounded-xl border bg-transparent outline-none resize-none transition-colors" 
+                    <textarea
+                      value={composeData.html || ''}
+                      onChange={e => setComposeData({ ...composeData, html: e.target.value })}
+                      placeholder="Compose HTML Message...."
+                      className="w-full p-4 rounded-xl border bg-transparent outline-none resize-none transition-colors"
                       style={{ borderColor: colors.border, color: '#000000', height: '500px' }}
                     />
                   ) : (
@@ -962,7 +993,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                         modules={quillModules}
                         formats={quillFormats}
                         placeholder="Compose your Message..."
-                        style={{ height: '500px' , background: 'white'}}
+                        style={{ height: '500px', background: 'white' }}
                         theme="snow"
                       />
                     </div>
@@ -994,8 +1025,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                       <button onClick={handleRestore} className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`} title="Restore"><RotateCcw className="w-5 h-5 opacity-60" /></button>
                     ) : (
                       <>
-                        <button className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`} title="Reply"><Reply className="w-5 h-5 opacity-60" /></button>
-                        <button className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`} title="Forward"><Forward className="w-5 h-5 opacity-60" /></button>
+                        <button onClick={handleReply} className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`} title="Reply"><Reply className="w-5 h-5 opacity-60" /></button>
+                        <button onClick={handleForward} className={`p-2 rounded-lg hover:bg-black/5 transition-colors duration-700 ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`} title="Forward"><Forward className="w-5 h-5 opacity-60" /></button>
                         <button onClick={handleImportant} className="p-2 rounded-lg hover:bg-black/5 transition-colors duration-700" title="Mark as Important"><Pin className={`w-5 h-5 transition-all duration-700 ${selectedMail.important ? 'fill-red-500 text-red-500 opacity-100' : 'opacity-60'} ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`} /></button>
                         <button onClick={handleStar} className="p-2 rounded-lg hover:bg-black/5 transition-colors duration-700" title="Star"><Star className={`w-5 h-5 transition-all duration-700 ${selectedMail.flagged ? 'fill-yellow-400 text-yellow-400 opacity-100' : 'opacity-60'} ${themeMode === 'colored' ? 'text-[#2D62ED]' : themeMode === 'dark' ? 'text-[#ffffff]' : ''}`} /></button>
                       </>
@@ -1027,11 +1058,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                             key={item.label}
                             onClick={() => { item.action(); setIsActionMenuOpen(false); }}
                             className="w-full text-left px-4 py-3 text-sm font-bold hover:bg-black/5 transition-colors flex items-center gap-3"
-                            style={{ 
+                            style={{
                               color: colors.textMain,
                               backgroundColor: colors.middlePaneBg,
                               borderColor: colors.border,
-                              
+
                             }}
                           >
                             <item.icon className="w-4 h-4" />
@@ -1081,7 +1112,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                         {selectedMail.attachments.map((attachment, index) => {
                           console.log('Attachment data:', attachment);
                           console.log('Attachment URL:', attachment.url);
-                          
+
                           return (
                             <div key={index} className="flex items-center justify-between p-3 rounded-lg border" style={{ borderColor: colors.border, backgroundColor: colors.rightPaneBg }}>
                               <div className="flex items-center gap-3">
@@ -1104,24 +1135,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                                   onClick={async () => {
                                     try {
                                       console.log('Full attachment object:', attachment);
-                                      
+
                                       // Parse the URL to extract parameters
                                       if (!attachment.url) {
                                         throw new Error('Attachment URL is missing');
                                       }
-                                      
+
                                       const urlParams = new URLSearchParams(attachment.url.split('?')[1]);
                                       const uid = urlParams.get('uid');
                                       const folder = urlParams.get('folder');
                                       const index = urlParams.get('index');
                                       const filename = urlParams.get('filename');
-                                      
+
                                       console.log('Parsed URL params:', { uid, folder, index, filename });
-                                      
+
                                       if (!uid || uid === '123' || uid === 'undefined') {
                                         throw new Error('Invalid attachment UID - this might be test data');
                                       }
-                                      
+
                                       const downloadData = {
                                         email: userData.email,
                                         password: localStorage.getItem('password'),
@@ -1130,9 +1161,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                                         index: index,
                                         filename: filename
                                       };
-                                      
+
                                       console.log('Sending download request:', { ...downloadData, password: '***' });
-                                      
+
                                       const response = await fetch('/api/download-attachment', {
                                         method: 'POST',
                                         headers: {
@@ -1140,24 +1171,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                                         },
                                         body: JSON.stringify(downloadData)
                                       });
-                                      
+
                                       if (!response.ok) {
                                         const errorData = await response.json().catch(() => ({}));
                                         throw new Error(errorData.message || 'Preview failed');
                                       }
-                                      
+
                                       // Get the blob from response
                                       const blob = await response.blob();
-                                      
+
                                       // Create preview URL
                                       const url = window.URL.createObjectURL(blob);
                                       window.open(url, '_blank');
-                                      
+
                                       // Clean up after a delay
                                       setTimeout(() => {
                                         window.URL.revokeObjectURL(url);
                                       }, 1000);
-                                      
+
                                     } catch (error) {
                                       console.error('Preview error:', error);
                                       showToast(`Preview failed: ${error.message}`, 'error');
@@ -1181,7 +1212,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                                         index: urlParams.get('index'),
                                         filename: urlParams.get('filename')
                                       };
-                                      
+
                                       const response = await fetch('/api/download-attachment', {
                                         method: 'POST',
                                         headers: {
@@ -1189,14 +1220,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                                         },
                                         body: JSON.stringify(downloadData)
                                       });
-                                      
+
                                       if (!response.ok) {
                                         throw new Error('Download failed');
                                       }
-                                      
+
                                       // Get the blob from response
                                       const blob = await response.blob();
-                                      
+
                                       // Create download link
                                       const url = window.URL.createObjectURL(blob);
                                       const link = document.createElement('a');
@@ -1206,7 +1237,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                                       link.click();
                                       document.body.removeChild(link);
                                       window.URL.revokeObjectURL(url);
-                                      
+
                                       showToast('Attachment downloaded successfully', 'success');
                                     } catch (error) {
                                       console.error('Download error:', error);
@@ -1324,7 +1355,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
 
       <AnimatePresence>
         {isJunkWarningOpen && (
-                    <motion.div
+          <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           >
@@ -1336,7 +1367,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
               <p className="text-sm" style={{ color: colors.textMuted }}>This action cannot be undone. Are you sure you want to permanently delete this message?</p>
               <div className="flex justify-end gap-3 mt-2">
                 <button onClick={() => setIsJunkWarningOpen(false)} className="px-4 py-2 rounded-xl font-bold text-sm transition-colors hover:bg-black/5" style={{ color: colors.textMain }}>Cancel</button>
-                <button onClick={() => {confirmDelete(); setIsJunkWarningOpen(false)}} className="px-4 py-2 rounded-xl font-bold text-sm text-white bg-red-500 hover:bg-red-600 transition-colors shadow-lg">Junk</button>
+                <button onClick={() => { confirmDelete(); setIsJunkWarningOpen(false) }} className="px-4 py-2 rounded-xl font-bold text-sm text-white bg-red-500 hover:bg-red-600 transition-colors shadow-lg">Junk</button>
               </div>
             </motion.div>
           </motion.div>
