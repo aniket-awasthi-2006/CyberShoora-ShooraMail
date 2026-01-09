@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import {
   Menu, Search, Star, Send, FileText, Trash2, Mail, MoreVertical, Reply, Forward, Mails, Pin,
   Plus, Circle, LogOut, Sun, Moon, Palette, ArrowLeft, X, Check, Loader2,
-  Settings, Copy, Shield, Inbox, RefreshCw, AlertCircle, RotateCcw, Eye, Paperclip
+  Copy, Shield, Inbox, RefreshCw, AlertCircle, RotateCcw, Eye, Paperclip
 } from 'lucide-react';
 import 'react-quill/dist/quill.snow.css';
 import { ThemeMode } from '../types';
@@ -849,7 +849,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
               <SidebarItem icon={Send} label="Sent" count={messages.filter(m => m.folder === 'sent').length || undefined} active={activeFolder === 'sent'} onClick={() => setActiveFolder('sent')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
               <SidebarItem icon={FileText} label="Drafts" count={messages.filter(m => m.folder === 'drafts').length || undefined} active={activeFolder === 'drafts'} onClick={() => setActiveFolder('drafts')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
               <SidebarItem icon={Mails} label="All Mails" count={activeFolder === 'all' && (messages.filter(m => m.folder === 'inbox').length + messages.filter(m => m.folder === 'sent').length) > 0 ? (messages.filter(m => m.folder === 'inbox').length + messages.filter(m => m.folder === 'sent').length) : null} active={activeFolder === 'all'} onClick={() => setActiveFolder('all')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
-              <SidebarItem icon={Settings} label="Settings" onClick={() => setIsSettingsOpen(true)} isCollapsed={isCollapsed && !isMobile} colors={colors} />
               <SidebarItem icon={Trash2} label="Trash" count={messages.filter(m => m.folder === 'trash').length || undefined} active={activeFolder === 'trash'} onClick={() => setActiveFolder('trash')} isCollapsed={isCollapsed && !isMobile} colors={colors} />
 
               {(!isCollapsed || isMobile) && (

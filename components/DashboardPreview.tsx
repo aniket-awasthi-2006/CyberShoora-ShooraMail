@@ -21,16 +21,21 @@ const DashboardPreview: React.FC<DashboardPreviewProps> = ({ onOpenApp, themeMod
    * Assumes files exist at /assets/slide1.png, etc.
    */
   const localImages = [
-    "/components/assets/slide1.png",
-    "/components/assets/slide2.png",
-    "/components/assets/slide3.png"
+    "./assets/slide1.png",
+    "./assets/slide2.png",
+    "./assets/slide3.png",
+    "./assets/slide4.png",
+    "./assets/slide5.png",
+
   ];
 
   // High-fidelity fallbacks to ensure the UI is never broken
   const fallbackImages = [
-    "https://lh3.google.com/u/0/d/17RSWmaiTm--DGvU2zx-II-kf6i2RigBj=w1920-h904-iv2?auditContext=prefetch",
-    "https://lh3.google.com/u/0/d/1MwylPt8zAqFvB0ZR7GvAxB6WeCDY5BtM=w1920-h904-iv2?auditContext=prefetch",
-    "https://lh3.google.com/u/0/d/1OAhZP9IYQA3cpenA9sZLDW3w8ubxWZEd=w1264-h904-iv2?auditContext=prefetch"
+    "https://res.cloudinary.com/dtwumvj5i/image/upload/v1767977843/slide1_dp3cce.png",
+    "https://res.cloudinary.com/dtwumvj5i/image/upload/v1767977841/slide2_sfdi35.png",
+    "https://res.cloudinary.com/dtwumvj5i/image/upload/v1767977841/slide3_m64knq.png",
+    "https://res.cloudinary.com/dtwumvj5i/image/upload/v1767977850/slide4_hyrhwt.png",
+    "https://res.cloudinary.com/dtwumvj5i/image/upload/v1767977854/slide5_wxtsnj.png"
   ];
 
   useEffect(() => {

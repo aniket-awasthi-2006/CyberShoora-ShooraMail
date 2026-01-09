@@ -1,0 +1,22 @@
+{
+    "sourceFile": "components/FloatingIcon.tsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1767977095759,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1767977102439,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,8 +1,8 @@\n import React from 'react';\r\n import { motion } from 'framer-motion';\r\n import { LucideIcon } from 'lucide-react';\r\n-import { ThemeMode } from './App';\r\n+import { ThemeMode } from '../App';\r\n \r\n interface FloatingIconProps {\r\n   icon: LucideIcon;\r\n   delay?: number;\r\n"
+                }
+            ],
+            "date": 1767977095759,
+            "name": "Commit-0",
+            "content": "import React from 'react';\r\nimport { motion } from 'framer-motion';\r\nimport { LucideIcon } from 'lucide-react';\r\nimport { ThemeMode } from './App';\r\n\r\ninterface FloatingIconProps {\r\n  icon: LucideIcon;\r\n  delay?: number;\r\n  className?: string;\r\n  themeMode?: ThemeMode;\r\n  customTextColor?: string;\r\n  customBgColor?: string;\r\n}\r\n\r\nconst MotionDiv = motion.div as any;\r\n\r\nconst FloatingIcon: React.FC<FloatingIconProps> = ({ icon: Icon, delay = 0, className = \"\", themeMode = 'light', customTextColor, customBgColor }) => {\r\n  const isLight = themeMode === 'light';\r\n  const isColored = themeMode === 'colored';\r\n\r\n  return (\r\n    <MotionDiv\r\n      initial={{ y: 0 }}\r\n      animate={{ y: [-15, 15, -15] }}\r\n      transition={{\r\n        duration: 6,\r\n        repeat: Infinity,\r\n        ease: \"easeInOut\",\r\n        delay: delay,\r\n      }}\r\n      className={`absolute ${className} z-10`}\r\n    >\r\n      <div className={`p-4 rounded-2xl shadow-xl border transition-all duration-700 flex items-center justify-center hover:scale-110 cursor-default ${isLight ? 'bg-white border-gray-100 text-gray-800' :\r\n          themeMode === 'dark' ? 'bg-[#131416] border-[#25282B] text-gray-200' :\r\n            ''\r\n        }`}\r\n        style={isColored ? { backgroundColor: customTextColor, borderColor: 'rgba(255,255,255,0.2)', color: 'white', boxShadow: `0 25px 50px -12px ${customTextColor}20` } : {}}\r\n      >\r\n        <Icon className=\"w-6 h-6\" strokeWidth={1.5} />\r\n      </div>\r\n    </MotionDiv>\r\n  );\r\n};\r\n\r\nexport default FloatingIcon;"
+        }
+    ]
+}
