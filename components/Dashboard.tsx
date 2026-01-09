@@ -198,6 +198,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
   const [tempCustomTextColor, setTempCustomTextColor] = useState(customTextColor);
   const [tempCustomBgColor, setTempCustomBgColor] = useState(customBgColor);
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageLimit, setPageLimit] = useState(10);
+  const [totalMessages, setTotalMessages] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [hasPrevPage, setHasPrevPage] = useState(false);
 
   const textColors = ['#72bad5', '#0e4c6d', '#03324e', '#ef4043', '#be1e2d', '#c43240', '#ff8c00'];
   const bgColors = ['#84e3c8', '#dcedc1', '#b6e2dd', '#FFFFFF'];
@@ -231,9 +236,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
   };
 
+  const handleNextPage = () => {
+    if (hasNextPage) {
+      const newPage = currentPage + 1;
+      setCurrentPage(newPage);
+      fetchMessages(newPage, pageLimit);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (hasPrevPage) {
+      const newPage = currentPage - 1;
+      setCurrentPage(newPage);
+      fetchMessages(newPage, pageLimit);
+    }
+  };
+
   useEffect(() => {
     // fetch when user data is available and folder changes
-    fetchMessages();
+    setCurrentPage(1);
+    fetchMessages(1, pageLimit);
   }, [activeFolder, userData]);
 
   // Auto-save drafts
@@ -347,7 +369,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     api.post('/api/toggle-star', { messageId: selectedMail.id, starred: !selectedMail.flagged, email: userData.email, password: localStorage.getItem('password') }).catch(() => { });
   };
 
-  const fetchMessages = async () => {
+  const fetchMessages = async (page: number = currentPage, limit: number = pageLimit) => {
     if (!userData?.email) return;
     const password = localStorage.getItem('password');
     if (!password) return;
@@ -355,19 +377,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
     setIsReloading(true);
     try {
       let endpoint = '/api/inbox-fetch';
-      let payload: any = { email: userData.email, password: password || '' };
+      let payload: any = { email: userData.email, password: password || '', page, limit };
       let currentFolder = 'inbox';
 
       // Special handling for 'all' folder - fetch both inbox and sent
       if (activeFolder === 'all') {
-        // Fetch inbox emails
-        const inboxResponse = await api.post('/api/inbox-fetch', { email: userData.email, password: password || '' });
+        // Fetch inbox emails with pagination
+        const inboxResponse = await api.post('/api/inbox-fetch', { email: userData.email, password: password || '', page, limit });
 
-        // Fetch sent emails
+        // Fetch sent emails with pagination
         const sentResponse = await api.post('/api/folder-fetch', {
           email: userData.email,
           password: password || '',
-          folder: 'Sent'
+          folder: 'Sent',
+          page,
+          limit
         });
 
         let allMails: any[] = [];
@@ -424,6 +448,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
 
         userData.inboxMails = mappedMessages;
         setMessages(mappedMessages);
+
+        // Set pagination metadata
+        const totalInbox = inboxResponse.data.data?.total || 0;
+        const totalSent = sentResponse.data.data?.total || 0;
+        setTotalMessages(totalInbox + totalSent);
+        setHasNextPage(userData.inboxMails.length >= pageLimit);
+        setHasPrevPage(page > 1);
+
         showToast(`${activeFolder} synced successfully`, 'success');
         return;
       }
@@ -485,6 +517,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
 
         userData.inboxMails = mappedMessages;
         setMessages(mappedMessages);
+
+        // Set pagination metadata
+        setTotalMessages(data.data?.total || 0);
+        setHasNextPage(userData.inboxMails.length >= pageLimit);
+        setHasPrevPage(page > 1);
+
         showToast(`${activeFolder} synced successfully`, 'success');
       }
     } catch (error) {
@@ -716,9 +754,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
 
   const handleForward = () => {
     if (!selectedMail) return;
-    
+
     const forwardSubject = selectedMail.subject.startsWith('Fwd: ') ? selectedMail.subject : `Fwd: ${selectedMail.subject}`;
-    
+
     const originalMessage = `
 <div style="border-left: 2px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;">
   <p><em>--- Forwarded message ---</em></p>
@@ -729,7 +767,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
   <br>
   <div>${selectedMail.body}</div>
 </div>`;
-    
+
     setComposeData({
       to: '',
       subject: forwardSubject,
@@ -923,9 +961,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
               </div>
             ))}
 
-            <div className="p-6 flex justify-center">
+            <div className="p-6 flex flex-col items-center gap-4">
               <button
-                onClick={fetchMessages}
+                onClick={() => fetchMessages(currentPage, pageLimit)}
                 disabled={isReloading}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold shadow-sm transition-all duration-700 hover:shadow-md active:scale-95 ${isReloading ? 'opacity-60 cursor-wait' : 'hover:scale-105'}`}
                 style={{ backgroundColor: colors.itemActiveBg, color: colors.primary }}
@@ -933,6 +971,29 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, themeMode, setThemeMode
                 <RefreshCw className={`w-4 h-4 ${isReloading ? 'animate-spin' : ''}`} />
                 <span>{isReloading ? 'Syncing...' : 'Reload Mails'}</span>
               </button>
+
+              {/* Pagination Controls */}
+              <div className="flex items-center gap-24 mt-2">
+                <button
+                  onClick={handlePrevPage}
+                  disabled={!hasPrevPage || isReloading}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-700 ${hasPrevPage && !isReloading ? 'hover:scale-105 hover:shadow-md' : 'opacity-50 cursor-not-allowed'}`}
+                  style={{ backgroundColor: hasPrevPage && !isReloading ? colors.itemActiveBg : colors.inputBg, color: colors.primary }}
+                >
+                  Previous
+                </button>
+                <span className="text-sm font-bold" style={{ color: colors.textMain }}>
+                  Page - {currentPage}
+                </span>
+                <button
+                  onClick={handleNextPage}
+                  disabled={!hasNextPage || isReloading}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-700 ${hasNextPage && !isReloading ? 'hover:scale-105 hover:shadow-md' : 'opacity-50 cursor-not-allowed'}`}
+                  style={{ backgroundColor: hasNextPage && !isReloading ? colors.itemActiveBg : colors.inputBg, color: colors.primary }}
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
         </div>

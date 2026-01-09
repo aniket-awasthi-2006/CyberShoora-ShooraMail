@@ -9,7 +9,7 @@ router.post('/login-fetch', async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        const emails = await fetchInbox(email, password);
+        const emails = await fetchInbox(email, password, 1, 10);
 
         // Send Welcome Mail (Fire and forget)
         const welcomeHtml = `
@@ -68,10 +68,10 @@ router.post('/login-fetch', async (req, res) => {
 
 // Fetch Inbox Emails
 router.post('/inbox-fetch', async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, page = 1, limit = 10 } = req.body;
 
     try {
-        const emails = await fetchInbox(email, password);
+        const emails = await fetchInbox(email, password, parseInt(page), parseInt(limit));
         res.status(200).json({ success: true, data: emails });
     } catch (error) {
         res.status(500).json({ success: false, message: "Failed to fetch inbox" });
@@ -80,10 +80,10 @@ router.post('/inbox-fetch', async (req, res) => {
 
 // Fetch Emails by Folder
 router.post('/folder-fetch', async (req, res) => {
-    const { email, password, folder } = req.body;
+    const { email, password, folder, page = 1, limit = 10 } = req.body;
 
     try {
-        const emails = await fetchEmailsByFolder(email, password, folder);
+        const emails = await fetchEmailsByFolder(email, password, folder, parseInt(page), parseInt(limit));
         res.status(200).json({ success: true, data: emails });
     } catch (error) {
         res.status(500).json({ success: false, message: "Failed to fetch folder emails" });
@@ -96,7 +96,7 @@ router.post('/send-mail', async (req, res) => {
     try {
         // Always send HTML content - if html is provided use it, otherwise convert body to HTML
         const htmlContent = html || `<div>${body}</div>`;
-        
+
         // Process attachments for nodemailer
         let processedAttachments = [];
         if (attachments && Array.isArray(attachments)) {
@@ -131,7 +131,7 @@ router.post('/send-mail', async (req, res) => {
                 };
             });
         }
-        
+
         await sendEmail(
             { user: email, pass: password },
             { from: email, to, subject, html: htmlContent, text: body, attachments: processedAttachments }
@@ -140,32 +140,32 @@ router.post('/send-mail', async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     } finally {
-            try {
-                const htmlContent = html || `<div>${body}</div>`;
-                
-                // Process attachments for saving sent email
-                let processedAttachments = [];
-                if (attachments && Array.isArray(attachments)) {
-                    processedAttachments = attachments.map(attachment => ({
-                        filename: attachment.filename,
-                        size: attachment.size,
-                        mimetype: attachment.mimetype,
-                        url: attachment.url
-                    }));
-                }
-                
-                await saveSentEmail(
-                    email, // Assuming authDetails has the email/user
-                    password, // Assuming authDetails has the password
-                    { from: email, to, subject, html: htmlContent, text: body, attachments: processedAttachments }
-                );
-            } catch (err) {
-                // We log the error but don't throw it, because the email WAS actually sent to the recipient.
-                // We don't want to tell the frontend "Failed" just because the copy wasn't saved.
-                console.error('Error saving sent email copy:', err);
+        try {
+            const htmlContent = html || `<div>${body}</div>`;
+
+            // Process attachments for saving sent email
+            let processedAttachments = [];
+            if (attachments && Array.isArray(attachments)) {
+                processedAttachments = attachments.map(attachment => ({
+                    filename: attachment.filename,
+                    size: attachment.size,
+                    mimetype: attachment.mimetype,
+                    url: attachment.url
+                }));
             }
+
+            await saveSentEmail(
+                email, // Assuming authDetails has the email/user
+                password, // Assuming authDetails has the password
+                { from: email, to, subject, html: htmlContent, text: body, attachments: processedAttachments }
+            );
+        } catch (err) {
+            // We log the error but don't throw it, because the email WAS actually sent to the recipient.
+            // We don't want to tell the frontend "Failed" just because the copy wasn't saved.
+            console.error('Error saving sent email copy:', err);
         }
     }
+}
 );
 
 // Reply to Email
@@ -174,7 +174,7 @@ router.post('/reply-mail', async (req, res) => {
     try {
         // Always send HTML content - if html is provided use it, otherwise convert body to HTML
         const htmlContent = html || `<div>${body}</div>`;
-        
+
         await replyEmail(
             { user: email, pass: password },
             { from: email, to, subject, html: htmlContent, text: body, inReplyTo: originalMessageId }
@@ -191,7 +191,7 @@ router.post('/forward-mail', async (req, res) => {
     try {
         // Always send HTML content - if html is provided use it, otherwise convert body to HTML
         const htmlContent = html || `<div>${body}</div>`;
-        
+
         await forwardEmail(
             { user: email, pass: password },
             { from: email, to, subject, html: htmlContent, text: body }
@@ -282,19 +282,19 @@ router.post('/move-mail', async (req, res) => {
 // Test IMAP Connection
 router.post('/test-imap', async (req, res) => {
     const { email, password } = req.body;
-    
+
     console.log('Testing IMAP connection for:', email ? '***@***' : 'missing');
-    
+
     if (!email || !password) {
         return res.status(400).json({ success: false, message: "Email and password required" });
     }
-    
+
     try {
         // Import getClient directly
         const { ImapFlow } = await import('imapflow');
         const dotenv = await import('dotenv');
         dotenv.config();
-        
+
         const client = new ImapFlow({
             host: process.env.IMAP_HOST || 'imap.cybershoora.com',
             port: parseInt(process.env.IMAP_PORT) || 993,
@@ -308,24 +308,24 @@ router.post('/test-imap', async (req, res) => {
             },
             logger: true
         });
-        
+
         console.log('Attempting to connect...');
         await client.connect();
         console.log('Connection successful!');
-        
+
         // Test basic mailbox access
         let lock = await client.getMailboxLock('INBOX');
         console.log('Mailbox lock acquired');
-        
+
         const status = await client.status('INBOX', { messages: true });
         console.log('Mailbox status:', status);
-        
+
         lock.release();
         await client.logout();
         console.log('Connection closed successfully');
-        
-        res.json({ 
-            success: true, 
+
+        res.json({
+            success: true,
             message: "IMAP connection successful",
             mailboxInfo: {
                 totalMessages: status.messages,
@@ -334,10 +334,10 @@ router.post('/test-imap', async (req, res) => {
         });
     } catch (error) {
         console.error('IMAP connection test failed:', error);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             message: "IMAP connection failed",
-            error: error.message 
+            error: error.message
         });
     }
 });
@@ -345,29 +345,29 @@ router.post('/test-imap', async (req, res) => {
 // Download Attachment
 router.post('/download-attachment', async (req, res) => {
     const { email, password, uid, folder, index, filename } = req.body;
-    
+
     console.log('Download request:', { email: email ? '***@***' : 'missing', password: password ? '***' : 'missing', uid, folder, index, filename });
-    
+
     if (!email || !password) {
         console.log('Missing credentials error');
         return res.status(400).json({ success: false, message: "User credentials required" });
     }
-    
+
     try {
         console.log('Attempting to download attachment...');
         // Ensure folder is properly formatted for IMAP
         const imapFolder = (folder === 'inbox' ? 'INBOX' : folder?.toUpperCase()) || 'INBOX';
         console.log('Using folder:', imapFolder);
-        
+
         const attachment = await downloadAttachment(email, password, uid, imapFolder, parseInt(index));
-        
+
         console.log('Attachment found:', { filename: attachment.filename, size: attachment.size, contentType: attachment.contentType });
-        
+
         // Set appropriate headers
         res.setHeader('Content-Type', attachment.contentType);
         res.setHeader('Content-Disposition', `${attachment.contentDisposition}; filename="${attachment.filename}"`);
         res.setHeader('Content-Length', attachment.size);
-        
+
         // Send the attachment content
         res.send(attachment.content);
     } catch (error) {

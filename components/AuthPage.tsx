@@ -94,30 +94,27 @@ const AuthPage: React.FC<AuthPageProps> = ({ onNavigate, themeMode, customTextCo
         setError(msg || "Network error. Please check your connection.");
       }
       setIsLoading(false);
-    } 
+    }
   };
 
   return (
-    <div className={`min-h-screen flex items-start justify-center px-6 pt-20 transition-all duration-700 ${
-      isLight ? 'bg-white' :
-      isDark ? 'bg-[#0B0C0D]' :
-      'bg-[#FFFFFF]'
-    }`}>
+    <div className={`min-h-screen flex items-start justify-center px-6 pt-20 transition-all duration-700 ${isLight ? 'bg-white' :
+        isDark ? 'bg-[#0B0C0D]' :
+          'bg-[#FFFFFF]'
+      }`}>
       <MotionDiv
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`max-w-md w-full rounded-[40px] shadow-2xl border p-10 flex flex-col gap-8 transition-all duration-700 ${
-          isLight ? 'bg-white border-gray-100' :
-          isDark ? 'bg-[#131416] border-[#25282B]' :
-          'bg-white border-gray-100'
-        }`}
+        className={`max-w-md w-full rounded-[40px] shadow-2xl border p-10 flex flex-col gap-8 transition-all duration-700 ${isLight ? 'bg-white border-gray-100' :
+            isDark ? 'bg-[#131416] border-[#25282B]' :
+              'bg-white border-gray-100'
+          }`}
       >
         <div className="flex justify-center">
-          <div className={`w-12 h-12 p-2 rounded-2xl flex items-center justify-center transition-all duration-700 ${
-            isColored ? 'bg-black/10' :
-            isLight ? 'bg-black/5' :
-            'bg-white/10'
-          }`}>
+          <div className={`w-12 h-12 p-2 rounded-2xl flex items-center justify-center transition-all duration-700 ${isColored ? 'bg-black/10' :
+              isLight ? 'bg-black/5' :
+                'bg-white/10'
+            }`}>
             {isDark ? (
               <LogoWhite className="w-full h-full" />
             ) : (
@@ -127,28 +124,25 @@ const AuthPage: React.FC<AuthPageProps> = ({ onNavigate, themeMode, customTextCo
         </div>
 
         <div className="text-center flex flex-col gap-2">
-          <h2 className={`text-3xl font-black tracking-tighter transition-colors duration-700 ${
-            isLight ? 'text-black' :
-            isDark ? 'text-white' :
-            ''
-          }`} style={isColored ? { color: customTextColor } : {}}>
+          <h2 className={`text-3xl font-black tracking-tighter transition-colors duration-700 ${isLight ? 'text-black' :
+              isDark ? 'text-white' :
+                ''
+            }`} style={isColored ? { color: customTextColor } : {}}>
             Welcome back.
           </h2>
-          <p className={`text-sm font-medium transition-colors duration-700 ${
-            isLight ? 'text-gray-500' :
-            isDark ? 'text-gray-400' :
-            'text-gray-500'
-          }`}>
+          <p className={`text-sm font-medium transition-colors duration-700 ${isLight ? 'text-gray-500' :
+              isDark ? 'text-gray-400' :
+                'text-gray-500'
+            }`}>
             Enter your credentials to access ShooraMail
           </p>
         </div>
 
         {error && (
-          <div className={`p-3 rounded-xl flex items-start gap-3 text-sm transition-colors duration-700 ${
-            isLight ? 'bg-red-50 text-red-600' :
-            isDark ? 'bg-red-900/20 text-red-400' :
-            'bg-red-50 text-red-600'
-          }`}>
+          <div className={`p-3 rounded-xl flex items-start gap-3 text-sm transition-colors duration-700 ${isLight ? 'bg-red-50 text-red-600' :
+              isDark ? 'bg-red-900/20 text-red-400' :
+                'bg-red-50 text-red-600'
+            }`}>
             <AlertCircle className="w-5 h-5 shrink-0" />
             <div className="flex flex-col gap-1">
               <span>{error}</span>

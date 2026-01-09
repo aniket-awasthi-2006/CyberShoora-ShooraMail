@@ -49,7 +49,7 @@ const parseEmail = async (message, source, folder = 'inbox') => {
                 // Create direct download link using IMAP message data
                 const imapFolder = folder === 'inbox' ? 'INBOX' : folder.toUpperCase();
                 const downloadUrl = `/api/download-attachment?uid=${message.uid}&folder=${imapFolder}&index=${i}&filename=${encodeURIComponent(attachment.filename || `attachment-${i}`)}`;
-                
+
                 processedAttachments.push({
                     filename: attachment.filename || `attachment-${i}`,
                     originalFilename: attachment.filename,
@@ -116,27 +116,32 @@ const saveSentEmail = async (email, password, mailOptions) => {
 };
 
 //fetch inbox
-const fetchInbox = async (email, password) => {
+const fetchInbox = async (email, password, page = 1, limit = 10) => {
     const client = getClient(email, password);
     const parsedMails = [];
+    let status;
 
     await client.connect();
 
     // We must lock the mailbox to perform operations
     let lock = await client.getMailboxLock('INBOX');
     try {
+        // Force refresh mailbox by selecting it explicitly to get latest status
+        await client.mailboxOpen('INBOX', { readOnly: true });
+        await client.noop();
+
         // 1. Get status to find out how many messages are there
-        const status = await client.status('INBOX', { messages: true });
-
-        // 2. Calculate range for the last 10 messages
-        // If total is 50, we want 41:50. If total is 5, we want 1:5.
+        status = await client.status('INBOX', { messages: true });
         const total = status.messages;
-        const fetchCount = 10;
-        const start = Math.max(1, total - fetchCount + 1);
-        const range = `${start}:*`;
 
-        if (total > 0) {
-            // 3. Fetch specific range using UID and Source options
+        // 2. Calculate pagination using UIDs for reliability
+        const offset = (page - 1) * limit;
+        const start = Math.max(1, total - offset - limit + 1);
+        const end = Math.min(total, total - offset);
+        const range = total > 0 ? `${start}:${end}` : '';
+
+        if (total > 0 && start <= end) {
+            // 3. Fetch specific range using sequence numbers but get UID info
             for await (let message of client.fetch(range, { envelope: true, source: true, uid: true, flags: true, internalDate: true })) {
                 const parsed = await parseEmail(message, message.source);
                 parsedMails.push(parsed);
@@ -156,26 +161,35 @@ const fetchInbox = async (email, password) => {
     return {
         userName,
         mails: parsedMails.reverse(),
+        pagination: {
+            page,
+            limit,
+            total: status.messages,
+            hasNext: page * limit < status.messages,
+            hasPrev: page > 1
+        }
     };
 };
 
-const fetchEmailsByFolder = async (email, password, folder) => {
+const fetchEmailsByFolder = async (email, password, folder, page = 1, limit = 20) => {
     const client = getClient(email, password);
     const parsedMails = [];
+    let status;
 
     await client.connect();
 
     let lock = await client.getMailboxLock(folder);
     try {
-        const status = await client.status(folder, { messages: true });
-
-        // Fetch last 20 as per your original logic
+        status = await client.status(folder, { messages: true });
         const total = status.messages;
-        const fetchCount = 20;
-        const start = Math.max(1, total - fetchCount + 1);
-        const range = `${start}:*`;
 
-        if (total > 0) {
+        // Calculate pagination
+        const offset = (page - 1) * limit;
+        const start = Math.max(1, total - offset - limit + 1);
+        const end = Math.min(total, total - offset);
+        const range = total > 0 ? `${start}:${end}` : '';
+
+        if (total > 0 && start <= end) {
             for await (let message of client.fetch(range, { envelope: true, source: true, uid: true, flags: true, internalDate: true })) {
                 const parsed = await parseEmail(message, message.source, folder);
                 parsedMails.push(parsed);
@@ -191,6 +205,13 @@ const fetchEmailsByFolder = async (email, password, folder) => {
     return {
         folder,
         mails: parsedMails.reverse(),
+        pagination: {
+            page,
+            limit,
+            total: status.messages,
+            hasNext: page * limit < status.messages,
+            hasPrev: page > 1
+        }
     };
 };
 
@@ -327,50 +348,50 @@ const moveEmail = async (email, password, messageId, destinationFolder, sourceFo
 
 const downloadAttachment = async (email, password, uid, folder, index) => {
     console.log('downloadAttachment called with:', { email: email ? '***@***' : 'missing', password: password ? '***' : 'missing', uid, folder, index });
-    
+
     try {
         // First, let's just test if we can connect and get basic mailbox info
         const client = getClient(email, password);
-        
+
         console.log('Connecting to IMAP server...');
         await client.connect();
         console.log('IMAP connection successful');
-        
+
         try {
             console.log('Getting mailbox lock for folder:', folder);
             let lock = await client.getMailboxLock(folder);
             console.log('Mailbox lock acquired');
-            
+
             try {
                 console.log('Fetching message with UID:', uid);
                 // Fetch the specific message with full source
                 const message = await client.fetchOne(uid, { source: true, uid: true });
                 console.log('Message fetched, has source:', !!message.source);
-                
+
                 if (!message || !message.source) {
                     throw new Error('Message not found');
                 }
-                
+
                 console.log('Parsing email message...');
                 // Parse the email to get attachments
                 const mail = await simpleParser(message.source);
                 console.log('Email parsed, attachments count:', mail.attachments ? mail.attachments.length : 0);
-                
+
                 if (!mail.attachments || mail.attachments.length === 0) {
                     throw new Error('No attachments found in email');
                 }
-                
+
                 if (index >= mail.attachments.length) {
                     throw new Error(`Attachment index ${index} out of range (total: ${mail.attachments.length})`);
                 }
-                
+
                 const attachment = mail.attachments[index];
-                console.log('Found attachment:', { 
-                    filename: attachment.filename, 
+                console.log('Found attachment:', {
+                    filename: attachment.filename,
                     size: attachment.size ? attachment.size.length : 0,
-                    contentType: attachment.contentType 
+                    contentType: attachment.contentType
                 });
-                
+
                 return {
                     filename: attachment.filename || `attachment-${index}`,
                     contentType: attachment.contentType || 'application/octet-stream',
